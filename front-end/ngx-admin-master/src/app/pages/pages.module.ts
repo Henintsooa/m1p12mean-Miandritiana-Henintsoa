@@ -7,6 +7,8 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { ECommerceModule } from './e-commerce/e-commerce.module';
 import { PagesRoutingModule } from './pages-routing.module';
 import { MiscellaneousModule } from './miscellaneous/miscellaneous.module';
+import { LoginComponent } from './auth/login/login.component';
+import { InscriptionComponent } from './auth/inscription/inscription.component';
 
 @NgModule({
   imports: [
@@ -19,6 +21,8 @@ import { MiscellaneousModule } from './miscellaneous/miscellaneous.module';
   ],
   declarations: [
     PagesComponent,
+    LoginComponent,
+    InscriptionComponent,
   ],
 })
 export class PagesModule {
