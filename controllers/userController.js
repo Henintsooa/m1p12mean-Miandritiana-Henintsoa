@@ -60,9 +60,9 @@ exports.loginUser = async (req, res) => {
         res.json({
             message: "Connexion réussie.",
             token,
+            iduser: user._id, // Inclure l'iduser dans la réponse
             role: user.status
         });
-
     } catch (error) {
         console.error("Erreur lors de la connexion:", error);
         res.status(500).json({ message: "Erreur serveur" });
