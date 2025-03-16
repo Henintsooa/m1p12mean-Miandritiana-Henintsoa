@@ -3,7 +3,7 @@ const RendezVousSchema = new mongoose.Schema({
     iddevis: { type: mongoose.Schema.Types.ObjectId, ref: 'Devis', required: true },
     propositiondates: [{ type: Date, required: true }],
     infosup: { type: String, default: 0 },
-    status: { type: Number, default: false },
+    status: { type: Number, default: 0 },
     datevalide: { type: Date, default: null },
     idmecanicien: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   }, { timestamps: true });

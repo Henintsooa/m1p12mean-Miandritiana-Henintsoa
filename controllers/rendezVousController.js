@@ -160,6 +160,9 @@ exports.createRendezVous = async (req, res) => {
       iddevis,
       propositiondates: validTimes.map(({ date }) => date), // Conversion en ISO
       infosup: infosup || "", // Valeur par défaut si non fournie
+      status: 0,
+      datevalide: null,
+      idmecanicien: null,
     });
 
     // Sauvegarde en base de données

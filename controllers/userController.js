@@ -93,7 +93,8 @@ exports.createClient = async (req, res) => {
             telephone,
             mdp: hashedPassword,
         });
-
+        console.log("Inscription de client");
+        console.log("données reçues:", req.body);
         // Sauvegarder l'utilisateur
         const savedUser = await user.save();
         res.status(201).json(savedUser);
