@@ -5,6 +5,8 @@ const DevisSchema = new mongoose.Schema({
     idmodele: { type: mongoose.Schema.Types.ObjectId, ref: 'Modele', required: true },
     idclient: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     idprestations: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Prestation' }], // Tableau de références vers la collection Prestations
+    prixtotal: { type: Number, default: 0 },
+    accepte: { type: Boolean, default: false },
   }, { timestamps: true });
 
 module.exports = mongoose.model('Devis', DevisSchema);
