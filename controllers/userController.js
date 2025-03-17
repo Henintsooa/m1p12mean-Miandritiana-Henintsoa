@@ -86,7 +86,7 @@ exports.createClient = async (req, res) => {
         
         // Créer l'utilisateur avec le statut "client"
         const user = new User({
-            status: "client",  // Imposé automatiquement
+            status: 1,  // Imposé automatiquement (client)
             nom,
             prenom,
             email,

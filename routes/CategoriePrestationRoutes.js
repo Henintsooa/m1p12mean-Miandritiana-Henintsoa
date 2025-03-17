@@ -4,4 +4,5 @@ const CategoriePrestationController = require('../controllers/categoriePrestatio
 
 
 router.get('/', CategoriePrestationController.getAllCategoriePrestation);
+router.post('/', CategoriePrestationController.createCategoriePrestation);
 module.exports = router;
