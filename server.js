@@ -14,6 +14,7 @@ app.use(cors());
 app.use(express.json());
 
 // Routes
+app.use('/notifications', require('./routes/NotificationRoutes'));
 app.use('/rendezvous', require('./routes/RendezVousRoutes'));
 app.use('/devis', require('./routes/DevisRoutes'));
 app.use('/prestation', require('./routes/PrestationRoutes'));

@@ -113,7 +113,7 @@ exports.getAllDevis = (req, res) => {
 // Récupérer un devis par ID avec prestations
 exports.getAllAcceptedDevisByUser = (req, res) => {
   const { idclient } = req.params; // Récupérer l'ID utilisateur depuis l'URL
-
+  console.log("client id", idclient);
   // Vérifier si l'ID est valide
   if (!mongoose.Types.ObjectId.isValid(idclient)) {
       return res.status(400).json({ error: 'ID utilisateur invalide' });

@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const RendezVousController = require('../controllers/rendezVousController');
 
+router.post('/confirmation', RendezVousController.confirmerNouvelleDate);
+router.post('/proposer', RendezVousController.proposerNouvelleDate);
 router.post('/valider', RendezVousController.validerRendezVous);
 router.get('/mecaniciens', RendezVousController.getMecaniciensDisponibles);
 router.post('/', RendezVousController.createRendezVous);
