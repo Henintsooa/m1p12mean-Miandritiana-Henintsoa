@@ -36,7 +36,8 @@ exports.confirmerNouvelleDate = async (req, res) => {
           idrendezvous,
           { 
             datevalide: rendezVous.propositiondates[0].toISOString(),  // On prend la première date de la proposition
-            status: 1  // Status de rendez-vous validé
+            status: 1,  // Status de rendez-vous validé
+            avancement: 1  // Avancement de 1 pour indiquer en attente chez le mécanicien
           },
           { new: true }
         );
@@ -261,7 +262,7 @@ exports.validerRendezVous = async (req, res) => {
     // Mettre à jour le rendez-vous avec la date validée et le mécanicien assigné
     const updatedRendezVous = await RendezVous.findByIdAndUpdate(
       idrendezvous,
-      { datevalide: dateObj, idmecanicien: idmecanicien },
+      { datevalide: dateObj, idmecanicien: idmecanicien, status: 1, avancement: 1 }, // Status de rendez-vous validé et avancement en attente chez le mécanicien
       { new: true }
     );
 
@@ -314,18 +315,38 @@ exports.getMecaniciensDisponibles = async (req, res) => {
       return res.status(400).json({ error: "L'heure doit être entre 08h-12h ou 13h-17h." });
     }
 
-    // Récupérer les mécaniciens
+    // Récupérer tous les mécaniciens
     const mecaniciens = await User.find({ status: 2 });
 
-    // Récupérer les mécaniciens ayant déjà un rendez-vous à cette date et heure
-    const rendezVous = await RendezVous.find({ datevalide: dateObj }).select('idmecanicien');
+    // Définir la plage horaire du jour (8h-12h et 13h-17h)
+    const dateDebutMatin = new Date(dateObj.setHours(8, 0, 0, 0)); // 08:00
+    const dateFinMatin = new Date(dateObj.setHours(12, 0, 0, 0)); // 12:00
+    const dateDebutApresMidi = new Date(dateObj.setHours(13, 0, 0, 0)); // 13:00
+    const dateFinApresMidi = new Date(dateObj.setHours(17, 0, 0, 0)); // 17:00
 
-    const idsMecaniciensOccupes = rendezVous.map(rdv => rdv.idmecanicien.toString());
+    // Récupérer les rendez-vous du jour pendant les horaires de travail
+    const rendezVousMatin = await RendezVous.find({
+      datevalide: { $gte: dateDebutMatin, $lt: dateFinMatin }
+    }).select('idmecanicien');
+    
+    const rendezVousApresMidi = await RendezVous.find({
+      datevalide: { $gte: dateDebutApresMidi, $lt: dateFinApresMidi }
+    }).select('idmecanicien');
 
-    // Filtrer les mécaniciens disponibles
-    const mecaniciensDisponibles = mecaniciens.filter(mecanicien => 
-      !idsMecaniciensOccupes.includes(mecanicien._id.toString())
-    );
+    const tousRendezVous = [...rendezVousMatin, ...rendezVousApresMidi];
+
+    // Compter les rendez-vous par mécanicien
+    const rdvParMecanicien = {};
+    tousRendezVous.forEach(rdv => {
+      const idMecanicien = rdv.idmecanicien.toString();
+      rdvParMecanicien[idMecanicien] = (rdvParMecanicien[idMecanicien] || 0) + 1;
+    });
+
+    // Filtrer les mécaniciens disponibles (moins de 6 rendez-vous dans la journée)
+    const mecaniciensDisponibles = mecaniciens.filter(mecanicien => {
+      const idMecanicien = mecanicien._id.toString();
+      return !rdvParMecanicien[idMecanicien] || rdvParMecanicien[idMecanicien] < 6;
+    });
 
     res.status(200).json(mecaniciensDisponibles);
   } catch (error) {
@@ -383,7 +404,7 @@ exports.createRendezVous = async (req, res) => {
       iddevis,
       propositiondates: validTimes.map(({ date }) => date), // Conversion en ISO
       infosup: infosup || "", // Valeur par défaut si non fournie
-      status: 0,
+      status: 2, // Status de proposition de date
       datevalide: null,
       idmecanicien: null,
     });
@@ -443,14 +464,240 @@ exports.createRendezVous = async (req, res) => {
 // Récupérer tous les RendezVous
 exports.getAllRendezVousNonValides = (req, res) => {
     console.log("Nom de la collection utilisée par Mongoose :", mongoose.model('RendezVous').collection.name);
-  RendezVous.find({datevalide: null, idmecanicien: null })
+  RendezVous.find({datevalide: null, idmecanicien: null, status: 0})
     .then(rendezVous => res.status(200).json(rendezVous))
     .catch(err => res.status(500).json({ error: 'Erreur lors de la récupération des devis', err }));
 };
 
-exports.getAllRendezVousValides = (req, res) => {
-  console.log("Nom de la collection utilisée par Mongoose :", mongoose.model('RendezVous').collection.name);
-RendezVous.find({ datevalide: { $ne: null }, idmecanicien: { $ne: null } })
-  .then(rendezVous => res.status(200).json(rendezVous))
-  .catch(err => res.status(500).json({ error: 'Erreur lors de la récupération des devis', err }));
+exports.getAllRendezVousValidesByClient = async (req, res) => {
+  try {
+    console.log("Fetching all rendez-vous valides par idclient");
+    const { idclient } = req.body;
+    console.log("ID Client reçu:", idclient);
+
+    // 1. Trouver tous les devis associés à ce client
+    const devisList = await Devis.find({ idclient: idclient }).select('_id immatriculation idprestations');
+
+    if (devisList.length === 0) {
+      return res.status(404).json({ message: "Aucun devis trouvé pour ce client." });
+    }
+
+    // 2. Extraire les ID des devis trouvés
+    const devisIds = devisList.map(devis => devis._id);
+
+    // 3. Trouver les rendez-vous qui ont un iddevis correspondant
+    const rendezVousList = await RendezVous.find({
+      iddevis: { $in: devisIds },
+      datevalide: { $ne: null },
+      idmecanicien: { $ne: null },
+      status: 1
+    })
+    .populate({
+      path: 'iddevis',
+      select: 'immatriculation idprestations',
+      populate: {
+        path: 'idprestations',
+        model: 'Prestation',
+        select: 'nom' // Sélectionner seulement le nom des prestations
+      }
+    })
+    .populate({
+      path: 'idmecanicien', // Récupérer les informations sur le mécanicien
+      select: 'nom prenom' // Sélectionner seulement le nom et prénom du mécanicien
+    })
+    .select('datevalide avancement'); // Sélectionner les champs nécessaires
+
+    if (rendezVousList.length === 0) {
+      return res.status(404).json({ message: "Aucun rendez-vous valide trouvé pour ce client." });
+    }
+
+    // 4. Formatter la réponse pour afficher uniquement les champs nécessaires
+    const result = rendezVousList.map(rdv => ({
+      iddevis: rdv.iddevis._id,
+      datevalide: rdv.datevalide,
+      immatriculation: rdv.iddevis?.immatriculation || 'N/A',
+      mecanicien: `${rdv.idmecanicien?.nom || ''} ${rdv.idmecanicien?.prenom || ''}`,
+      avancement: rdv.avancement,
+      prestations: rdv.iddevis?.idprestations.map(prestation => ({
+        nom: prestation.nom,
+      })) || []
+    }));
+
+    res.status(200).json(result);
+  } catch (err) {
+    console.error("Erreur lors de la récupération des rendez-vous:", err);
+    res.status(500).json({ error: "Erreur lors de la récupération des rendez-vous", details: err });
+  }
 };
+
+
+
+exports.getAllRendezVousEnAttenteByClient = async (req, res) => {
+  try {
+    console.log("Fetching all rendez-vous en attente");
+    const { idclient } = req.body;
+    console.log("ID Client reçu:", idclient);
+
+    // 1. Trouver tous les devis associés à ce client
+    const devisList = await Devis.find({ idclient: idclient }).select('_id');
+
+    if (devisList.length === 0) {
+      return res.status(404).json({ message: "Aucun devis trouvé pour ce client." });
+    }
+
+    // 2. Extraire les ID des devis trouvés
+    const devisIds = devisList.map(devis => devis._id);
+
+    // 3. Trouver les rendez-vous en attente liés aux devis du client
+    const rendezVousList = await RendezVous.find({
+      iddevis: { $in: devisIds },
+      datevalide: null,
+      idmecanicien: null,
+      status: 2
+    })
+    .select('createdAt infosup _id iddevis'); // Sélectionner uniquement les champs demandés
+
+    if (rendezVousList.length === 0) {
+      return res.status(404).json({ message: "Aucun rendez-vous en attente trouvé pour ce client." });
+    }
+
+    // 4. Formatter la réponse
+    const result = rendezVousList.map(rdv => ({
+      idrendezvous: rdv._id,
+      iddevis: rdv.iddevis,
+      createdAt: rdv.createdAt,
+      infosup: rdv.infosup || 'Aucune info'
+    }));
+
+    res.status(200).json(result);
+  } catch (err) {
+    console.error("Erreur lors de la récupération des rendez-vous en attente:", err);
+    res.status(500).json({ error: "Erreur lors de la récupération des rendez-vous en attente", details: err });
+  }
+};
+
+exports.getDetailsDevisByRendezVous = async (req, res) => {
+  try {
+    console.log("Fetching details of the devis by idrendezvous");
+    const { idrendezvous } = req.body;
+    console.log("ID Rendez-vous reçu:", idrendezvous);
+
+    // 1. Trouver le rendez-vous associé à l'ID donné
+    const rendezVous = await RendezVous.findById(idrendezvous).select('iddevis');
+
+    if (!rendezVous) {
+      return res.status(404).json({ message: "Aucun rendez-vous trouvé avec cet ID." });
+    }
+
+    // 2. Trouver le devis correspondant avec les détails demandés
+    const devisItem = await Devis.findById(rendezVous.iddevis)
+      .populate({ path: 'idtypemoteur', select: 'nom' }) // Récupérer le nom du type moteur
+      .populate({ path: 'idmodele', select: 'nom' }) // Récupérer le nom du modèle
+      .populate({ 
+        path: 'idprestations', 
+        populate: [
+          { path: 'idtypemoteur', select: 'nom' },
+          { path: 'idmodele', select: 'nom' },
+          { path: 'idcategorieprestation', select: 'nom' }
+        ],
+        select: 'nom prixunitaire idtypemoteur idmodele idcategorieprestation'
+      })
+      .select('_id immatriculation idtypemoteur idmodele idclient accepte idprestations');
+
+    if (!devisItem) {
+      return res.status(404).json({ message: "Aucun devis trouvé pour ce rendez-vous." });
+    }
+
+    // 3. Calculer le prix total (somme des prix des prestations)
+    const prixtotal = devisItem.idprestations.reduce((sum, prestation) => sum + prestation.prixunitaire, 0);
+
+    // 4. Structurer la réponse
+    const result = {
+      _id: devisItem._id,
+      immatriculation: devisItem.immatriculation,
+      typemoteur: devisItem.idtypemoteur?.nom || 'N/A',
+      modele: devisItem.idmodele?.nom || 'N/A',
+      idclient: devisItem.idclient,
+      prixtotal, // Prix total calculé dynamiquement
+      accepte: devisItem.accepte,
+      prestations: devisItem.idprestations.map(prestation => ({
+        _id: prestation._id,
+        nom: prestation.nom,
+        typemoteur: prestation.idtypemoteur?.nom || 'N/A',
+        modele: prestation.idmodele?.nom || 'N/A',
+        categorieprestation: prestation.idcategorieprestation?.nom || 'N/A',
+        prixunitaire: prestation.prixunitaire
+      }))
+    };
+
+    res.status(200).json(result);
+  } catch (err) {
+    console.error("Erreur lors de la récupération des détails du devis:", err);
+    res.status(500).json({ error: "Erreur lors de la récupération des détails du devis", details: err });
+  }
+};
+
+exports.changerAvancementRendezVous = async (req, res) => {
+  try {
+    const { idrendezvous } = req.body; // ID du rendez-vous à mettre à jour
+    console.log("ID Rendez-vous reçu:", idrendezvous);
+
+    // 1. Trouver le rendez-vous par son ID
+    const rendezVous = await RendezVous.findById(idrendezvous);
+
+    if (!rendezVous) {
+      return res.status(404).json({ message: "Rendez-vous non trouvé." });
+    }
+
+    // 2. Vérifier l'avancement actuel et l'incrémenter
+    if (rendezVous.avancement >= 3) {
+      return res.status(400).json({ message: "L'avancement ne peut plus être modifié." });
+    }
+
+    // Incrémenter l'avancement
+    rendezVous.avancement += 1;
+
+    // 3. Sauvegarder le rendez-vous mis à jour
+    await rendezVous.save();
+
+    // 4. Si l'avancement atteint 3, envoyer la notification au client
+    if (rendezVous.avancement === 3) {
+      // Vérifier et récupérer l'ID du client à partir de l'ID de devis
+      const devis = await Devis.findById(rendezVous.iddevis);
+      if (!devis) {
+        return res.status(404).json({ error: "Devis non trouvé." });
+      }
+
+      const idclient = devis.idclient;  // L'ID du client est dans le devis
+      const immatriculation = devis.immatriculation;  // Récupérer l'immatriculation du véhicule
+      const dateRendezVous = new Date(rendezVous.datevalide);  // Récupérer la date du rendez-vous
+
+      // Convertir la date en UTC et la formater pour une lecture lisible
+      const dateFormatted = dateRendezVous.toISOString().replace('T', ' ').split('.')[0]; // Format: YYYY-MM-DD HH:mm:ss
+
+      // Création de la notification pour le client avec plus de détails
+      const notificationClient = new Notification({
+        iduser: idclient,
+        type: "Prestation terminée",
+        message: `Les prestations du rendez-vous du ${dateFormatted} sur votre véhicule (Immatriculation: ${immatriculation}) sont terminées. Vous pouvez maintenant récupérer votre véhicule.`,
+        status: false,  // Notification non lue
+        date_creation: new Date(),
+      });
+
+      // Sauvegarde de la notification pour le client
+      await notificationClient.save();
+      console.log("Notification envoyée au client.");
+    }
+
+    // 5. Retourner la réponse avec les nouvelles informations
+    res.status(200).json({
+      message: "Avancement mis à jour.",
+      avancement: rendezVous.avancement
+    });
+
+  } catch (err) {
+    console.error("Erreur lors de la mise à jour de l'avancement du rendez-vous:", err);
+    res.status(500).json({ error: "Erreur serveur lors de la mise à jour de l'avancement", details: err });
+  }
+};
+
