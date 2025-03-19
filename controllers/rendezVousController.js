@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const User = require('../models/User');
 const Notification = require("../models/Notification")
 const Devis = require("../models/Devis");
+const Prestation = require('../models/Prestation'); 
 
 exports.confirmerNouvelleDate = async (req, res) => {
   try {
@@ -219,7 +220,7 @@ exports.proposerNouvelleDate = async (req, res) => {
 
 exports.validerRendezVous = async (req, res) => {
   try {
-    const { idrendezvous, dateValide, idmecanicien, idclient } = req.body;
+    const { idrendezvous, datevalide, idmecanicien, idclient } = req.body;
     console.log("ID Rendez-vous reçu:", idrendezvous);
     console.log("ID Mécanicien reçu:", idmecanicien);
     console.log("ID Client reçu:", idclient);
@@ -241,11 +242,11 @@ exports.validerRendezVous = async (req, res) => {
       return res.status(404).json({ error: "Mécanicien non trouvé." });
     }
 
-    if (!dateValide || isNaN(Date.parse(dateValide))) {
+    if (!datevalide || isNaN(Date.parse(datevalide))) {
       return res.status(400).json({ error: "Date invalide fournie." });
     }
 
-    const dateObj = new Date(dateValide);
+    const dateObj = new Date(datevalide);
     const heure = dateObj.getUTCHours();
 
     // Vérification des horaires de travail (8h-12h et 13h-17h)
@@ -469,6 +470,91 @@ exports.getAllRendezVousNonValides = (req, res) => {
     .catch(err => res.status(500).json({ error: 'Erreur lors de la récupération des devis', err }));
 };
 
+exports.getAllRendezVousValides = async (req, res) => {
+  try {
+    console.log("Fetching all rendez-vous valides");
+
+    // Récupérer la date de la requête (si fournie)
+    const { dateheure } = req.body;
+    console.log("Date et heure reçues:", dateheure);
+
+    // 1. Trouver tous les devis associés
+    const devisList = await Devis.find().select('_id immatriculation idprestations');
+
+    if (devisList.length === 0) {
+      return res.status(404).json({ message: "Aucun devis trouvé." });
+    }
+
+    // 2. Extraire les ID des devis trouvés
+    const devisIds = devisList.map(devis => devis._id);
+
+    // 3. Préparer la condition de filtrage pour la date
+    let dateFilter = {};
+
+    if (dateheure) {
+      // Convertir la date en UTC si elle est fournie
+      const searchDate = new Date(dateheure);
+      console.log("Date recherchée:", searchDate);
+
+      // Vérifier si la date est valide
+      if (isNaN(searchDate)) {
+        return res.status(400).json({ message: "La date et l'heure spécifiées sont invalides." });
+      }
+
+      // Comparer la date et l'heure avec datevalide sans modification
+      dateFilter = {
+        datevalide: searchDate // Comparaison exacte de la date et heure
+      };
+      console.log("Filtre de date appliqué:", dateFilter);
+    }
+
+    // 4. Trouver les rendez-vous valides avec ou sans date filtrée
+    const rendezVousList = await RendezVous.find({
+      iddevis: { $in: devisIds },
+      ...dateFilter, // Applique le filtre sur la date si elle est fournie
+      idmecanicien: { $ne: null },
+      status: 1
+    })
+    .populate({
+      path: 'iddevis',
+      select: 'immatriculation idprestations idclient',
+      populate: [
+        { path: 'idprestations', model: 'Prestation', select: 'nom' },
+        { path: 'idclient', model: 'User', select: 'nom prenom' }
+      ]
+    })
+    .populate({
+      path: 'idmecanicien',
+      select: 'nom prenom'
+    })
+    .select('datevalide avancement');
+
+    if (rendezVousList.length === 0) {
+      // Si aucun rendez-vous n'a été trouvé, afficher un message approprié
+      return res.status(404).json({ message: "Aucun rendez-vous valide trouvé pour cette date et heure." });
+    }
+
+    // 5. Formatter la réponse correctement
+    const result = rendezVousList.map(rdv => ({
+      idrendezvous: rdv._id,
+      iddevis: rdv.iddevis._id,
+      datevalide: rdv.datevalide,
+      immatriculation: rdv.iddevis?.immatriculation || 'N/A',
+      client: `${rdv.iddevis?.idclient?.nom || ''} ${rdv.iddevis?.idclient?.prenom || ''}`,
+      mecanicien: `${rdv.idmecanicien?.nom || ''} ${rdv.idmecanicien?.prenom || ''}`,
+      avancement: rdv.avancement,
+      prestations: rdv.iddevis?.idprestations.map(prestation => prestation.nom) || []
+    }));
+
+    res.status(200).json(result);
+  } catch (err) {
+    console.error("Erreur lors de la récupération des rendez-vous:", err);
+    res.status(500).json({ error: "Erreur lors de la récupération des rendez-vous", details: err });
+  }
+};
+
+
+
 exports.getAllRendezVousValidesByClient = async (req, res) => {
   try {
     console.log("Fetching all rendez-vous valides par idclient");
@@ -513,6 +599,7 @@ exports.getAllRendezVousValidesByClient = async (req, res) => {
 
     // 4. Formatter la réponse pour afficher uniquement les champs nécessaires
     const result = rendezVousList.map(rdv => ({
+      idrendezvous: rdv._id,
       iddevis: rdv.iddevis._id,
       datevalide: rdv.datevalide,
       immatriculation: rdv.iddevis?.immatriculation || 'N/A',
@@ -530,6 +617,59 @@ exports.getAllRendezVousValidesByClient = async (req, res) => {
   }
 };
 
+exports.getAllRendezVousEnAttente = async (req, res) => {
+  try {
+    console.log("Fetching all rendez-vous en attente");
+
+    // 1. Trouver les rendez-vous en attente liés aux devis
+    const rendezVousList = await RendezVous.find({
+      iddevis: { $ne: null },
+      datevalide: null,
+      idmecanicien: null,
+      status: 2
+    })
+    .select('createdAt infosup _id iddevis propositiondates');
+
+    if (rendezVousList.length === 0) {
+      return res.status(404).json({ message: "Aucun rendez-vous en attente trouvé." });
+    }
+
+    // 2. Récupérer les détails associés à chaque rendez-vous
+    const result = await Promise.all(rendezVousList.map(async (rdv) => {
+      const devis = await Devis.findById(rdv.iddevis).select('idclient idprestations');
+
+      if (!devis) {
+        return null; // Si le devis est introuvable, passer au suivant
+      }
+
+      // Récupérer les informations du client
+      const client = await User.findById(devis.idclient).select('nom prenom');
+
+      // Récupérer les prestations associées au devis
+      const prestations = await Prestation.find({ _id: { $in: devis.idprestations } }).select('nom');
+
+      return {
+        idrendezvous: rdv._id,
+        iddevis: rdv.iddevis,
+        propositiondates: rdv.propositiondates || [],
+        idclient: devis.idclient,
+        client: `${client?.prenom || ''} ${client?.nom || ''}`,
+        prestations: prestations.map(prestation => prestation.nom), // Récupération des noms des prestations
+        infosup: rdv.infosup || 'Aucune info'
+      };
+    }));
+
+    // Filtrer les rendez-vous valides (supprimer les null si un devis était inexistant)
+    res.status(200).json(result.filter(rdv => rdv !== null));
+
+  } catch (err) {
+    console.error("Erreur lors de la récupération des rendez-vous en attente:", err);
+    res.status(500).json({ error: "Erreur lors de la récupération des rendez-vous en attente", details: err });
+  }
+};
+
+
+
 
 
 exports.getAllRendezVousEnAttenteByClient = async (req, res) => {
@@ -539,14 +679,15 @@ exports.getAllRendezVousEnAttenteByClient = async (req, res) => {
     console.log("ID Client reçu:", idclient);
 
     // 1. Trouver tous les devis associés à ce client
-    const devisList = await Devis.find({ idclient: idclient }).select('_id');
+    const devisList = await Devis.find({ idclient: idclient }).select('_id idprestations');
 
     if (devisList.length === 0) {
       return res.status(404).json({ message: "Aucun devis trouvé pour ce client." });
     }
 
-    // 2. Extraire les ID des devis trouvés
+    // 2. Extraire les ID des devis trouvés et les prestations associées
     const devisIds = devisList.map(devis => devis._id);
+    const prestationsIds = devisList.flatMap(devis => devis.idprestations || []); // Récupérer tous les ID des prestations
 
     // 3. Trouver les rendez-vous en attente liés aux devis du client
     const rendezVousList = await RendezVous.find({
@@ -555,19 +696,29 @@ exports.getAllRendezVousEnAttenteByClient = async (req, res) => {
       idmecanicien: null,
       status: 2
     })
-    .select('createdAt infosup _id iddevis'); // Sélectionner uniquement les champs demandés
+    .select('createdAt infosup _id iddevis');
 
     if (rendezVousList.length === 0) {
       return res.status(404).json({ message: "Aucun rendez-vous en attente trouvé pour ce client." });
     }
 
-    // 4. Formatter la réponse
-    const result = rendezVousList.map(rdv => ({
-      idrendezvous: rdv._id,
-      iddevis: rdv.iddevis,
-      createdAt: rdv.createdAt,
-      infosup: rdv.infosup || 'Aucune info'
-    }));
+    // 4. Récupérer les noms des prestations
+    const prestations = await Prestation.find({ _id: { $in: prestationsIds } }).select('nom');
+
+    // 5. Associer les prestations à chaque rendez-vous
+    const result = rendezVousList.map(rdv => {
+      // Trouver les prestations associées au devis de ce rendez-vous
+      const devis = devisList.find(d => d._id.toString() === rdv.iddevis.toString());
+      const prestationsAssociees = prestations.filter(p => devis.idprestations.includes(p._id.toString()));
+
+      return {
+        idrendezvous: rdv._id,
+        iddevis: rdv.iddevis,
+        createdAt: rdv.createdAt,
+        infosup: rdv.infosup || 'Aucune info',
+        prestations: prestationsAssociees.map(prestation => prestation.nom), // Liste des noms de prestations
+      };
+    });
 
     res.status(200).json(result);
   } catch (err) {
@@ -602,6 +753,10 @@ exports.getDetailsDevisByRendezVous = async (req, res) => {
         ],
         select: 'nom prixunitaire idtypemoteur idmodele idcategorieprestation'
       })
+      .populate({ 
+        path: 'idclient', // Ajout de la récupération des informations du client
+        select: 'nom prenom telephone email'
+      })
       .select('_id immatriculation idtypemoteur idmodele idclient accepte idprestations');
 
     if (!devisItem) {
@@ -617,7 +772,10 @@ exports.getDetailsDevisByRendezVous = async (req, res) => {
       immatriculation: devisItem.immatriculation,
       typemoteur: devisItem.idtypemoteur?.nom || 'N/A',
       modele: devisItem.idmodele?.nom || 'N/A',
-      idclient: devisItem.idclient,
+      clientnom: devisItem.idclient?.nom || 'N/A',
+      clientprenom: devisItem.idclient?.prenom || 'N/A',
+      clienttelephone: devisItem.idclient?.telephone || 'N/A',
+      clientemail: devisItem.idclient?.email || 'N/A',
       prixtotal, // Prix total calculé dynamiquement
       accepte: devisItem.accepte,
       prestations: devisItem.idprestations.map(prestation => ({

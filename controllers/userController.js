@@ -105,6 +105,118 @@ exports.createClient = async (req, res) => {
     }
 };
 
+// Récupérer tous les mécaniciens (status=2)
+exports.getAllMecaniciens = async (req, res) => {
+    try {
+        // Trouver tous les mécaniciens
+        const mecaniciens = await User.find({ status: 2 }).select('nom prenom email telephone');
+        
+        if (mecaniciens.length === 0) {
+            return res.status(404).json({ message: "Aucun mécanicien trouvé." });
+        }
+
+        res.status(200).json(mecaniciens);
+    } catch (error) {
+        console.error("Erreur lors de la récupération des mécaniciens:", error);
+        res.status(500).json({ message: "Erreur serveur" });
+    }
+};
+
+
+exports.createMecanicien = async (req, res) => {
+    try {
+        const { nom, prenom, email, telephone, mdp } = req.body;
+
+        // Vérifier si l'email existe déjà
+        const existingUser = await User.findOne({ email });
+        if (existingUser) {
+            return res.status(400).json({ message: "Cet email est déjà utilisé." });
+        }
+
+        // Hasher le mot de passe
+        const hashedPassword = await bcrypt.hash(mdp, 10);
+        
+        // Créer l'utilisateur avec le statut "mecanicien"
+        const user = new User({
+            status: 2,  // Imposé automatiquement (mecanicien")
+            nom,
+            prenom,
+            email,
+            telephone,
+            mdp: hashedPassword,
+        });
+        console.log("Inscription de mecanicien");
+        console.log("données reçues:", req.body);
+        // Sauvegarder l'utilisateur
+        const savedUser = await user.save();
+        res.status(201).json(savedUser);
+
+    } catch (error) {
+        console.error("Erreur lors de l'inscription:", error);
+        res.status(500).json({ message: "Erreur serveur" });
+    }
+};
+
+// Modifier un mécanicien
+exports.updateMecanicien = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { nom, prenom, email, telephone } = req.body;
+
+        // Vérifier si l'utilisateur existe
+        const mecanicien = await User.findById(id);
+        if (!mecanicien || mecanicien.status !== 2) {
+            return res.status(404).json({ message: "Mécanicien non trouvé ou mauvais statut." });
+        }
+
+        // Mettre à jour les informations
+        mecanicien.nom = nom || mecanicien.nom;
+        mecanicien.prenom = prenom || mecanicien.prenom;
+        mecanicien.email = email || mecanicien.email;
+        mecanicien.telephone = telephone || mecanicien.telephone;
+
+        // Sauvegarder les modifications
+        const updatedMecanicien = await mecanicien.save();
+
+        res.status(200).json(updatedMecanicien);
+    } catch (error) {
+        console.error("Erreur lors de la mise à jour du mécanicien:", error);
+        res.status(500).json({ message: "Erreur serveur" });
+    }
+};
+
+exports.changePassword = async (req, res) => {
+    try {
+        const { oldpassword, newpassword } = req.body;
+        const { id } = req.params; // Assuming the user is authenticated and we have access to the user ID from the JWT token
+
+        // Trouver l'utilisateur par son ID
+        const user = await User.findById(id);
+        if (!user) {
+            return res.status(404).json({ message: "Utilisateur non trouvé." });
+        }
+
+        // Vérifier l'ancien mot de passe
+        const match = await bcrypt.compare(oldpassword, user.mdp);
+        if (!match) {
+            return res.status(400).json({ message: "L'ancien mot de passe est incorrect." });
+        }
+
+        // Hasher le nouveau mot de passe
+        const hashedPassword = await bcrypt.hash(newpassword, 10);
+
+        // Mettre à jour le mot de passe
+        user.mdp = hashedPassword;
+
+        // Sauvegarder les modifications
+        await user.save();
+
+        res.status(200).json({ message: "Mot de passe changé avec succès." });
+    } catch (error) {
+        console.error("Erreur lors du changement de mot de passe:", error);
+        res.status(500).json({ message: "Erreur serveur" });
+    }
+};
 
 // Supprimer un utilisateur
 exports.deleteUser = async (req, res) => {

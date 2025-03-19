@@ -2,6 +2,10 @@ const express = require('express');
 const router = express.Router();
 const userController = require('../controllers/userController');
 
+router.post('/changepassword/:id', userController.changePassword);
+router.put('/mecanicien/:id', userController.updateMecanicien);
+router.get('/mecanicien', userController.getAllMecaniciens);
+router.post('/ajoutmecanicien', userController.createMecanicien);
 router.get('/', userController.getAllUsers);
 // router.post('/', userController.createUser);
 router.delete('/:id', userController.deleteUser);
