@@ -5,6 +5,7 @@ const PrestationSchema = new mongoose.Schema({
     idmodele: { type: mongoose.Schema.Types.ObjectId, ref: 'Modele', required: true },
     idcategorieprestation: { type: mongoose.Schema.Types.ObjectId, ref: 'CategoriePrestation', required: true },
     prixunitaire: { type: Number, required: true },
+    archive: { type: Boolean, default: false } // Ajout du champ archive
   }, { timestamps: true });
 
 module.exports = mongoose.model('Prestation', PrestationSchema,'prestation');
