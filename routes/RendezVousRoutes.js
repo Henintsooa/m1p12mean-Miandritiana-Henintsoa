@@ -12,6 +12,7 @@ router.get('/mecaniciens', RendezVousController.getMecaniciensDisponibles);
 router.post('/', RendezVousController.createRendezVous);
 router.get('/detailsdevis', RendezVousController.getDetailsDevisByRendezVous);
 router.get('/acceptes', RendezVousController.getAllRendezVousValidesByClient);
+router.get('/validesmecanicien', RendezVousController.getAllRendezVousValidesByMecanicien);
 router.get('/valides', RendezVousController.getAllRendezVousValides);
 router.get('/nonvalides', RendezVousController.getAllRendezVousNonValides);
 module.exports = router;

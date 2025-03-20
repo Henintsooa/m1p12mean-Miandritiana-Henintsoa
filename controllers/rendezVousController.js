@@ -474,9 +474,10 @@ exports.getAllRendezVousValides = async (req, res) => {
   try {
     console.log("Fetching all rendez-vous valides");
 
-    // Récupérer la date de la requête (si fournie)
-    const { dateheure } = req.body;
+    // Récupérer la date et l'avancement de la requête (si fournis)
+    const { dateheure, avancement } = req.body;
     console.log("Date et heure reçues:", dateheure);
+    console.log("Avancement reçu:", avancement);
 
     // 1. Trouver tous les devis associés
     const devisList = await Devis.find().select('_id immatriculation idprestations');
@@ -489,52 +490,45 @@ exports.getAllRendezVousValides = async (req, res) => {
     const devisIds = devisList.map(devis => devis._id);
 
     // 3. Préparer la condition de filtrage pour la date
-    let dateFilter = {};
+    let filters = { iddevis: { $in: devisIds }, idmecanicien: { $ne: null }, status: 1 };
 
     if (dateheure) {
-      // Convertir la date en UTC si elle est fournie
       const searchDate = new Date(dateheure);
       console.log("Date recherchée:", searchDate);
 
-      // Vérifier si la date est valide
       if (isNaN(searchDate)) {
         return res.status(400).json({ message: "La date et l'heure spécifiées sont invalides." });
       }
 
-      // Comparer la date et l'heure avec datevalide sans modification
-      dateFilter = {
-        datevalide: searchDate // Comparaison exacte de la date et heure
-      };
-      console.log("Filtre de date appliqué:", dateFilter);
+      filters.datevalide = searchDate;
     }
 
-    // 4. Trouver les rendez-vous valides avec ou sans date filtrée
-    const rendezVousList = await RendezVous.find({
-      iddevis: { $in: devisIds },
-      ...dateFilter, // Applique le filtre sur la date si elle est fournie
-      idmecanicien: { $ne: null },
-      status: 1
-    })
-    .populate({
-      path: 'iddevis',
-      select: 'immatriculation idprestations idclient',
-      populate: [
-        { path: 'idprestations', model: 'Prestation', select: 'nom' },
-        { path: 'idclient', model: 'User', select: 'nom prenom' }
-      ]
-    })
-    .populate({
-      path: 'idmecanicien',
-      select: 'nom prenom'
-    })
-    .select('datevalide avancement');
+    // 4. Appliquer le filtre sur l'avancement s'il est fourni et valide
+    if ([1, 2, 3].includes(Number(avancement))) {
+      filters.avancement = Number(avancement);
+    }
+
+    // 5. Trouver les rendez-vous valides avec les filtres appliqués
+    const rendezVousList = await RendezVous.find(filters)
+      .populate({
+        path: 'iddevis',
+        select: 'immatriculation idprestations idclient',
+        populate: [
+          { path: 'idprestations', model: 'Prestation', select: 'nom' },
+          { path: 'idclient', model: 'User', select: 'nom prenom' }
+        ]
+      })
+      .populate({
+        path: 'idmecanicien',
+        select: 'nom prenom'
+      })
+      .select('datevalide avancement');
 
     if (rendezVousList.length === 0) {
-      // Si aucun rendez-vous n'a été trouvé, afficher un message approprié
-      return res.status(404).json({ message: "Aucun rendez-vous valide trouvé pour cette date et heure." });
+      return res.status(404).json({ message: "Aucun rendez-vous valide trouvé avec ces critères." });
     }
 
-    // 5. Formatter la réponse correctement
+    // 6. Formatter la réponse correctement
     const result = rendezVousList.map(rdv => ({
       idrendezvous: rdv._id,
       iddevis: rdv.iddevis._id,
@@ -552,6 +546,7 @@ exports.getAllRendezVousValides = async (req, res) => {
     res.status(500).json({ error: "Erreur lors de la récupération des rendez-vous", details: err });
   }
 };
+
 
 
 
@@ -616,6 +611,95 @@ exports.getAllRendezVousValidesByClient = async (req, res) => {
     res.status(500).json({ error: "Erreur lors de la récupération des rendez-vous", details: err });
   }
 };
+
+exports.getAllRendezVousValidesByMecanicien = async (req, res) => {
+  try {
+    console.log("Fetching all rendez-vous valides par mécanicien");
+
+    // Récupérer les paramètres de la requête (si fournis)
+    const { idmecanicien, dateheure, avancement } = req.body;
+    console.log("ID Mécanicien reçu:", idmecanicien);
+    console.log("Date et heure reçues:", dateheure);
+    console.log("Avancement reçu:", avancement);
+
+    // Vérifier si l'id du mécanicien est fourni
+    if (!idmecanicien) {
+      return res.status(400).json({ message: "L'ID du mécanicien est requis." });
+    }
+
+    // 1. Trouver tous les devis associés
+    const devisList = await Devis.find().select('_id immatriculation idprestations');
+
+    if (devisList.length === 0) {
+      return res.status(404).json({ message: "Aucun devis trouvé." });
+    }
+
+    // 2. Extraire les ID des devis trouvés
+    const devisIds = devisList.map(devis => devis._id);
+
+    // 3. Préparer les filtres de recherche
+    let filters = { 
+      iddevis: { $in: devisIds }, 
+      idmecanicien,  // Filtrer par mécanicien
+      status: 1 
+    };
+
+    // 4. Appliquer le filtre sur la date si elle est fournie
+    if (dateheure) {
+      const searchDate = new Date(dateheure);
+      console.log("Date recherchée:", searchDate);
+
+      if (isNaN(searchDate)) {
+        return res.status(400).json({ message: "La date et l'heure spécifiées sont invalides." });
+      }
+
+      filters.datevalide = searchDate;
+    }
+
+    // 5. Appliquer le filtre sur l'avancement s'il est fourni et valide
+    if ([1, 2, 3].includes(Number(avancement))) {
+      filters.avancement = Number(avancement);
+    }
+
+    // 6. Rechercher les rendez-vous valides avec les filtres appliqués
+    const rendezVousList = await RendezVous.find(filters)
+      .populate({
+        path: 'iddevis',
+        select: 'immatriculation idprestations idclient',
+        populate: [
+          { path: 'idprestations', model: 'Prestation', select: 'nom' },
+          { path: 'idclient', model: 'User', select: 'nom prenom' }
+        ]
+      })
+      .populate({
+        path: 'idmecanicien',
+        select: 'nom prenom'
+      })
+      .select('datevalide avancement');
+
+    if (rendezVousList.length === 0) {
+      return res.status(404).json({ message: "Aucun rendez-vous valide trouvé avec ces critères." });
+    }
+
+    // 7. Formatter la réponse correctement
+    const result = rendezVousList.map(rdv => ({
+      idrendezvous: rdv._id,
+      iddevis: rdv.iddevis._id,
+      datevalide: rdv.datevalide,
+      immatriculation: rdv.iddevis?.immatriculation || 'N/A',
+      client: `${rdv.iddevis?.idclient?.nom || ''} ${rdv.iddevis?.idclient?.prenom || ''}`,
+      mecanicien: `${rdv.idmecanicien?.nom || ''} ${rdv.idmecanicien?.prenom || ''}`,
+      avancement: rdv.avancement,
+      prestations: rdv.iddevis?.idprestations.map(prestation => prestation.nom) || []
+    }));
+
+    res.status(200).json(result);
+  } catch (err) {
+    console.error("Erreur lors de la récupération des rendez-vous:", err);
+    res.status(500).json({ error: "Erreur lors de la récupération des rendez-vous", details: err });
+  }
+};
+
 
 exports.getAllRendezVousEnAttente = async (req, res) => {
   try {
