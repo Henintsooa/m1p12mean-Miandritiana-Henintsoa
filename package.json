@@ -11,6 +11,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "are-we-there-yet": "^4.0.2",
     "bcrypt": "^5.0.0",
     "body-parser": "^1.20.3",
     "cors": "^2.8.5",
