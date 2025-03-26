@@ -512,9 +512,13 @@ exports.getAllRendezVousValides = async (req, res) => {
     const rendezVousList = await RendezVous.find(filters)
       .populate({
         path: 'iddevis',
-        select: 'immatriculation idprestations idclient',
+        select: 'immatriculation prestations idclient',
         populate: [
-          { path: 'idprestations', model: 'Prestation', select: 'nom' },
+          { 
+            path: 'prestations.idprestation', 
+            model: 'Prestation', 
+            select: 'nom' 
+          },
           { path: 'idclient', model: 'User', select: 'nom prenom' }
         ]
       })
@@ -537,7 +541,11 @@ exports.getAllRendezVousValides = async (req, res) => {
       client: `${rdv.iddevis?.idclient?.nom || ''} ${rdv.iddevis?.idclient?.prenom || ''}`,
       mecanicien: `${rdv.idmecanicien?.nom || ''} ${rdv.idmecanicien?.prenom || ''}`,
       avancement: rdv.avancement,
-      prestations: rdv.iddevis?.idprestations.map(prestation => prestation.nom) || []
+      prestations: rdv.iddevis?.prestations.map(prestation => ({
+        idprestation: prestation.idprestation._id,  // Extraire l'ID directement
+        nom: prestation.idprestation.nom || 'Non spécifié',  // Extraire le nom de la prestation
+        avancement: prestation.avancement
+      })) || []
     }));
 
     res.status(200).json(result);
@@ -575,12 +583,15 @@ exports.getAllRendezVousValidesByClient = async (req, res) => {
     })
     .populate({
       path: 'iddevis',
-      select: 'immatriculation idprestations',
-      populate: {
-        path: 'idprestations',
-        model: 'Prestation',
-        select: 'nom' // Sélectionner seulement le nom des prestations
-      }
+        select: 'immatriculation prestations idclient',
+        populate: [
+          { 
+            path: 'prestations.idprestation', 
+            model: 'Prestation', 
+            select: 'nom' 
+          },
+          { path: 'idclient', model: 'User', select: 'nom prenom' }
+        ]
     })
     .populate({
       path: 'idmecanicien', // Récupérer les informations sur le mécanicien
@@ -600,8 +611,10 @@ exports.getAllRendezVousValidesByClient = async (req, res) => {
       immatriculation: rdv.iddevis?.immatriculation || 'N/A',
       mecanicien: `${rdv.idmecanicien?.nom || ''} ${rdv.idmecanicien?.prenom || ''}`,
       avancement: rdv.avancement,
-      prestations: rdv.iddevis?.idprestations.map(prestation => ({
-        nom: prestation.nom,
+      prestations: rdv.iddevis?.prestations.map(prestation => ({
+        idprestation: prestation.idprestation._id,  // Extraire l'ID directement
+        nom: prestation.idprestation.nom || 'Non spécifié',  // Extraire le nom de la prestation
+        avancement: prestation.avancement
       })) || []
     }));
 
@@ -665,9 +678,13 @@ exports.getAllRendezVousValidesByMecanicien = async (req, res) => {
     const rendezVousList = await RendezVous.find(filters)
       .populate({
         path: 'iddevis',
-        select: 'immatriculation idprestations idclient',
+        select: 'immatriculation prestations idclient',
         populate: [
-          { path: 'idprestations', model: 'Prestation', select: 'nom' },
+          { 
+            path: 'prestations.idprestation', 
+            model: 'Prestation', 
+            select: 'nom' 
+          },
           { path: 'idclient', model: 'User', select: 'nom prenom' }
         ]
       })
@@ -690,7 +707,12 @@ exports.getAllRendezVousValidesByMecanicien = async (req, res) => {
       client: `${rdv.iddevis?.idclient?.nom || ''} ${rdv.iddevis?.idclient?.prenom || ''}`,
       mecanicien: `${rdv.idmecanicien?.nom || ''} ${rdv.idmecanicien?.prenom || ''}`,
       avancement: rdv.avancement,
-      prestations: rdv.iddevis?.idprestations.map(prestation => prestation.nom) || []
+      prestations: rdv.iddevis?.prestations.map(prestation => ({
+        idprestation: prestation.idprestation._id,  // Extraire l'ID directement
+        nom: prestation.idprestation.nom || 'Non spécifié',  // Extraire le nom de la prestation
+        avancement: prestation.avancement
+      })) || []
+
     }));
 
     res.status(200).json(result);
@@ -720,7 +742,7 @@ exports.getAllRendezVousEnAttente = async (req, res) => {
 
     // 2. Récupérer les détails associés à chaque rendez-vous
     const result = await Promise.all(rendezVousList.map(async (rdv) => {
-      const devis = await Devis.findById(rdv.iddevis).select('idclient idprestations');
+      const devis = await Devis.findById(rdv.iddevis).select('idclient prestations');
 
       if (!devis) {
         return null; // Si le devis est introuvable, passer au suivant
@@ -730,7 +752,8 @@ exports.getAllRendezVousEnAttente = async (req, res) => {
       const client = await User.findById(devis.idclient).select('nom prenom');
 
       // Récupérer les prestations associées au devis
-      const prestations = await Prestation.find({ _id: { $in: devis.idprestations } }).select('nom');
+      // const prestations = await Prestation.find({ _id: { $in: devis.prestations } }).select('nom');
+      const prestations = await Prestation.find({ _id: { $in: devis.prestations.map(p => p.idprestation) } }).select('nom');
 
       return {
         idrendezvous: rdv._id,
@@ -763,7 +786,7 @@ exports.getAllRendezVousEnAttenteByClient = async (req, res) => {
     console.log("ID Client reçu:", idclient);
 
     // 1. Trouver tous les devis associés à ce client
-    const devisList = await Devis.find({ idclient: idclient }).select('_id idprestations');
+    const devisList = await Devis.find({ idclient: idclient }).select('_id prestations');
 
     if (devisList.length === 0) {
       return res.status(404).json({ message: "Aucun devis trouvé pour ce client." });
@@ -771,7 +794,7 @@ exports.getAllRendezVousEnAttenteByClient = async (req, res) => {
 
     // 2. Extraire les ID des devis trouvés et les prestations associées
     const devisIds = devisList.map(devis => devis._id);
-    const prestationsIds = devisList.flatMap(devis => devis.idprestations || []); // Récupérer tous les ID des prestations
+    const prestationsIds = devisList.flatMap(devis => devis.prestations.map(p => p.idprestation)); // Récupérer tous les ID des prestations
 
     // 3. Trouver les rendez-vous en attente liés aux devis du client
     const rendezVousList = await RendezVous.find({
@@ -793,14 +816,18 @@ exports.getAllRendezVousEnAttenteByClient = async (req, res) => {
     const result = rendezVousList.map(rdv => {
       // Trouver les prestations associées au devis de ce rendez-vous
       const devis = devisList.find(d => d._id.toString() === rdv.iddevis.toString());
-      const prestationsAssociees = prestations.filter(p => devis.idprestations.includes(p._id.toString()));
+      const prestationsAssociees = devis.prestations.map(p => {
+        // Chercher chaque prestation par son ID dans la liste des prestations
+        const prestation = prestations.find(prest => prest._id.toString() === p.idprestation.toString());
+        return prestation ? prestation.nom : null;
+      }).filter(nom => nom !== null); // Filtrer les nulls si une prestation n'est pas trouvée
 
       return {
         idrendezvous: rdv._id,
         iddevis: rdv.iddevis,
         createdAt: rdv.createdAt,
         infosup: rdv.infosup || 'Aucune info',
-        prestations: prestationsAssociees.map(prestation => prestation.nom), // Liste des noms de prestations
+        prestations: prestationsAssociees, // Liste des noms de prestations
       };
     });
 
@@ -819,7 +846,7 @@ exports.getDetailsDevisByRendezVous = async (req, res) => {
 
     // 1. Trouver le rendez-vous associé à l'ID donné
     const rendezVous = await RendezVous.findById(idrendezvous).select('iddevis');
-
+ 
     if (!rendezVous) {
       return res.status(404).json({ message: "Aucun rendez-vous trouvé avec cet ID." });
     }
@@ -829,26 +856,28 @@ exports.getDetailsDevisByRendezVous = async (req, res) => {
       .populate({ path: 'idtypemoteur', select: 'nom' }) // Récupérer le nom du type moteur
       .populate({ path: 'idmodele', select: 'nom' }) // Récupérer le nom du modèle
       .populate({ 
-        path: 'idprestations', 
-        populate: [
-          { path: 'idtypemoteur', select: 'nom' },
-          { path: 'idmodele', select: 'nom' },
-          { path: 'idcategorieprestation', select: 'nom' }
-        ],
-        select: 'nom prixunitaire idtypemoteur idmodele idcategorieprestation'
+        path: 'prestations', 
+        populate: { 
+          path: 'idprestation',  // Peupler les informations détaillées sur chaque prestation
+          select: 'nom prixunitaire idcategorieprestation', // Inclure nom, prix unitaire et catégorie
+          populate: { path: 'idcategorieprestation', select: 'nom' } // Peupler la catégorie de prestation
+        },
+        select: 'idprestation avancement' 
       })
       .populate({ 
         path: 'idclient', // Ajout de la récupération des informations du client
         select: 'nom prenom telephone email'
       })
-      .select('_id immatriculation idtypemoteur idmodele idclient accepte idprestations');
+      .select('_id immatriculation idtypemoteur idmodele idclient accepte prestations');
 
     if (!devisItem) {
       return res.status(404).json({ message: "Aucun devis trouvé pour ce rendez-vous." });
     }
 
     // 3. Calculer le prix total (somme des prix des prestations)
-    const prixtotal = devisItem.idprestations.reduce((sum, prestation) => sum + prestation.prixunitaire, 0);
+    const prixtotal = devisItem.prestations.reduce((sum, prestation) => {
+      return sum + (prestation.idprestation ? prestation.idprestation.prixunitaire : 0);
+    }, 0);
 
     // 4. Structurer la réponse
     const result = {
@@ -862,14 +891,14 @@ exports.getDetailsDevisByRendezVous = async (req, res) => {
       clientemail: devisItem.idclient?.email || 'N/A',
       prixtotal, // Prix total calculé dynamiquement
       accepte: devisItem.accepte,
-      prestations: devisItem.idprestations.map(prestation => ({
-        _id: prestation._id,
-        nom: prestation.nom,
-        typemoteur: prestation.idtypemoteur?.nom || 'N/A',
-        modele: prestation.idmodele?.nom || 'N/A',
-        categorieprestation: prestation.idcategorieprestation?.nom || 'N/A',
-        prixunitaire: prestation.prixunitaire
-      }))
+      prestations: devisItem.prestations.map(prestation => ({
+        idprestation: prestation.idprestation._id, // Récupérer uniquement l'_id de la prestation
+        nom: prestation.idprestation.nom,  // Nom de la prestation
+        avancement: prestation.avancement, // Avancement de la prestation
+        prixunitaire: prestation.idprestation.prixunitaire, // Prix unitaire de la prestation
+        idcategorieprestation: prestation.idprestation.idcategorieprestation._id, // L'ID de la catégorie de prestation
+        nomcategorieprestation: prestation.idprestation.idcategorieprestation.nom // Nom de la catégorie de prestation
+      })) || []
     };
 
     res.status(200).json(result);
@@ -881,35 +910,61 @@ exports.getDetailsDevisByRendezVous = async (req, res) => {
 
 exports.changerAvancementRendezVous = async (req, res) => {
   try {
-    const { idrendezvous } = req.body; // ID du rendez-vous à mettre à jour
+    const { idrendezvous, idprestation } = req.body; // ID du rendez-vous et de la prestation à mettre à jour
     console.log("ID Rendez-vous reçu:", idrendezvous);
+    console.log("ID Prestation reçu:", idprestation);
 
     // 1. Trouver le rendez-vous par son ID
     const rendezVous = await RendezVous.findById(idrendezvous);
-
     if (!rendezVous) {
       return res.status(404).json({ message: "Rendez-vous non trouvé." });
     }
 
-    // 2. Vérifier l'avancement actuel et l'incrémenter
-    if (rendezVous.avancement >= 3) {
-      return res.status(400).json({ message: "L'avancement ne peut plus être modifié." });
+    // 2. Trouver le devis lié au rendez-vous
+    const devis = await Devis.findById(rendezVous.iddevis);
+    if (!devis) {
+      return res.status(404).json({ message: "Devis non trouvé." });
     }
 
-    // Incrémenter l'avancement
-    rendezVous.avancement += 1;
+    // 3. Trouver la prestation spécifique dans le tableau des prestations du devis
+    const prestation = devis.prestations.find(p => p.idprestation.toString() === idprestation);
+    if (!prestation) {
+      return res.status(404).json({ message: "Prestation non trouvée dans ce devis." });
+    }
 
-    // 3. Sauvegarder le rendez-vous mis à jour
+    // 4. Vérifier si l'avancement de la prestation est déjà à 3 (terminé)
+    if (prestation.avancement >= 3) {
+      return res.status(400).json({ message: "L'avancement de cette prestation ne peut plus être modifié." });
+    }
+
+    // Incrémenter l'avancement de la prestation
+    prestation.avancement += 1;
+
+    // Sauvegarder le devis avec la prestation mise à jour
+    await devis.save();
+
+    // 5. Mettre à jour l'avancement du rendez-vous en fonction des prestations du devis
+    const allPrestationsTerminees = devis.prestations.every(p => p.avancement === 3);
+    const somePrestationsEnCours = devis.prestations.some(p => p.avancement === 2);
+    const allPrestationsEnAttente = devis.prestations.every(p => p.avancement === 1);
+
+    // Mettre à jour l'avancement du rendez-vous
+    if (allPrestationsTerminees) {
+      // Si toutes les prestations sont terminées, mettre l'avancement du rendez-vous à 3
+      rendezVous.avancement = 3;
+    } else if (somePrestationsEnCours) {
+      // Si une des prestations est en cours, mettre l'avancement du rendez-vous à 2
+      rendezVous.avancement = 2;
+    } else if (allPrestationsEnAttente) {
+      // Si toutes les prestations sont en attente, mettre l'avancement du rendez-vous à 1
+      rendezVous.avancement = 1;
+    }
+
+    // Sauvegarder le rendez-vous avec l'avancement mis à jour
     await rendezVous.save();
 
-    // 4. Si l'avancement atteint 3, envoyer la notification au client
-    if (rendezVous.avancement === 3) {
-      // Vérifier et récupérer l'ID du client à partir de l'ID de devis
-      const devis = await Devis.findById(rendezVous.iddevis);
-      if (!devis) {
-        return res.status(404).json({ error: "Devis non trouvé." });
-      }
-
+    // 6. Vérifier si toutes les prestations sont terminées et envoyer la notification si nécessaire
+    if (allPrestationsTerminees) {
       const idclient = devis.idclient;  // L'ID du client est dans le devis
       const immatriculation = devis.immatriculation;  // Récupérer l'immatriculation du véhicule
       const dateRendezVous = new Date(rendezVous.datevalide);  // Récupérer la date du rendez-vous
@@ -917,12 +972,12 @@ exports.changerAvancementRendezVous = async (req, res) => {
       // Convertir la date en UTC et la formater pour une lecture lisible
       const dateFormatted = dateRendezVous.toISOString().replace('T', ' ').split('.')[0]; // Format: YYYY-MM-DD HH:mm:ss
 
-      // Création de la notification pour le client avec plus de détails
+      // Création de la notification pour le client
       const notificationClient = new Notification({
         iduser: idclient,
         type: "Prestation terminée",
         message: `Les prestations du rendez-vous du ${dateFormatted} sur votre véhicule (Immatriculation: ${immatriculation}) sont terminées. Vous pouvez maintenant récupérer votre véhicule.`,
-        status: false,  // Notification non lue
+        status: false, // Notification non lue
         date_creation: new Date(),
       });
 
@@ -931,15 +986,149 @@ exports.changerAvancementRendezVous = async (req, res) => {
       console.log("Notification envoyée au client.");
     }
 
-    // 5. Retourner la réponse avec les nouvelles informations
+    // 7. Retourner la réponse avec les nouvelles informations
     res.status(200).json({
-      message: "Avancement mis à jour.",
-      avancement: rendezVous.avancement
+      message: "Avancement de la prestation et du rendez-vous mis à jour.",
+      avancementPrestation: prestation.avancement,
+      avancementRendezVous: rendezVous.avancement
     });
 
   } catch (err) {
-    console.error("Erreur lors de la mise à jour de l'avancement du rendez-vous:", err);
+    console.error("Erreur lors de la mise à jour de l'avancement de la prestation:", err);
     res.status(500).json({ error: "Erreur serveur lors de la mise à jour de l'avancement", details: err });
   }
 };
 
+
+exports.ajouterPrestationRendezVous = async (req, res) => {
+  try {
+    const { idrendezvous, idprestation } = req.body; // Récupération des ID de rendez-vous et de prestation
+    console.log("ID Rendez-vous reçu:", idrendezvous);
+    console.log("ID Prestation reçu:", idprestation);
+
+    // Trouver le rendez-vous par son ID
+    const rendezVous = await RendezVous.findById(idrendezvous);
+    if (!rendezVous) {
+      return res.status(404).json({ message: "Rendez-vous non trouvé." });
+    }
+
+    // Trouver le devis associé au rendez-vous
+    const devis = await Devis.findById(rendezVous.iddevis);
+    if (!devis) {
+      return res.status(404).json({ message: "Devis non trouvé." });
+    }
+
+    // Vérifier si la prestation est déjà présente dans le devis
+    const prestationExistante = devis.prestations.find(p => p.idprestation.toString() === idprestation);
+    if (prestationExistante) {
+      return res.status(400).json({ message: "Cette prestation est déjà ajoutée au devis." });
+    }
+
+    // Ajouter la prestation au tableau des prestations du devis
+    devis.prestations.push({ idprestation: idprestation, avancement: 1 }); // Ajout avec avancement à 1 (attente)
+
+    // Sauvegarder le devis avec la prestation ajoutée
+    await devis.save();
+
+    // Vérifier les avancements des prestations pour mettre à jour l'avancement du rendez-vous
+    const allPrestationsTerminees = devis.prestations.every(p => p.avancement === 3);
+    const somePrestationsEnCours = devis.prestations.some(p => p.avancement === 2);
+    const allPrestationsEnAttente = devis.prestations.every(p => p.avancement === 1);
+
+    // Mettre à jour l'avancement du rendez-vous en fonction des prestations du devis
+    if (allPrestationsTerminees) {
+      rendezVous.avancement = 3; // Toutes les prestations terminées
+    } else if (somePrestationsEnCours) {
+      rendezVous.avancement = 2; // Au moins une prestation en cours
+    } else if (allPrestationsEnAttente) {
+      rendezVous.avancement = 1; // Toutes les prestations en attente
+    } else {
+      // Si il y a un mix entre prestations en attente, en cours et terminées, on considère l'état comme "en cours"
+      rendezVous.avancement = 2;
+    }
+
+    // Sauvegarder le rendez-vous avec l'avancement mis à jour
+    await rendezVous.save();
+
+    // Retourner la réponse avec les prestations mises à jour
+    res.status(200).json({
+      message: "Prestation ajoutée au devis et avancement du rendez-vous mis à jour.",
+      prestations: devis.prestations,
+      avancementRendezVous: rendezVous.avancement
+    });
+
+  } catch (err) {
+    console.error("Erreur lors de l'ajout de la prestation:", err);
+    res.status(500).json({ error: "Erreur serveur lors de l'ajout de la prestation", details: err });
+  }
+};
+
+
+
+exports.supprimerPrestationRendezVous = async (req, res) => {
+  try {
+    const { idrendezvous, idprestation } = req.body; // Récupération des ID de rendez-vous et de prestation
+    console.log("ID Rendez-vous reçu:", idrendezvous);
+    console.log("ID Prestation reçu:", idprestation);
+
+    // Trouver le rendez-vous par son ID
+    const rendezVous = await RendezVous.findById(idrendezvous);
+    if (!rendezVous) {
+      return res.status(404).json({ message: "Rendez-vous non trouvé." });
+    }
+
+    // Trouver le devis associé au rendez-vous
+    const devis = await Devis.findById(rendezVous.iddevis);
+    if (!devis) {
+      return res.status(404).json({ message: "Devis non trouvé." });
+    }
+
+    // Trouver et vérifier la prestation à supprimer
+    const prestation = devis.prestations.find(p => p.idprestation.toString() === idprestation);
+    if (!prestation) {
+      return res.status(404).json({ message: "Prestation non trouvée." });
+    }
+
+    // Vérifier que la prestation à supprimer a un avancement en attente ou en cours (1 ou 2)
+    if (![1, 2].includes(prestation.avancement)) {
+      return res.status(400).json({ message: "La prestation ne peut être supprimée que si elle est en attente ou en cours." });
+    }
+
+    // Supprimer la prestation du tableau des prestations
+    devis.prestations = devis.prestations.filter(p => p.idprestation.toString() !== idprestation);
+
+    // Sauvegarder le devis après la suppression de la prestation
+    await devis.save();
+
+    // Vérifier les avancements des prestations pour mettre à jour l'avancement du rendez-vous
+    const allPrestationsTerminees = devis.prestations.every(p => p.avancement === 3);
+    const somePrestationsEnCours = devis.prestations.some(p => p.avancement === 2);
+    const allPrestationsEnAttente = devis.prestations.every(p => p.avancement === 1);
+
+    // Mettre à jour l'avancement du rendez-vous en fonction des prestations du devis
+    if (allPrestationsTerminees) {
+      rendezVous.avancement = 3; // Toutes les prestations sont terminées
+    } else if (somePrestationsEnCours) {
+      rendezVous.avancement = 2; // Au moins une prestation est en cours
+    } else if (allPrestationsEnAttente) {
+      rendezVous.avancement = 1; // Toutes les prestations sont en attente
+    } else {
+      // Si il y a un mix entre prestations en attente, en cours et terminées, on considère l'état comme "en cours"
+      rendezVous.avancement = 2;
+    }
+
+    // Sauvegarder le rendez-vous avec l'avancement mis à jour
+    await rendezVous.save();
+
+    // Retourner la réponse avec les prestations mises à jour
+    res.status(200).json({
+      message: "Prestation supprimée du devis et avancement du rendez-vous mis à jour.",
+      prestations: devis.prestations,
+      avancementRendezVous: rendezVous.avancement
+    });
+
+  } catch (err) {
+    console.error("Erreur lors de la suppression de la prestation:", err);
+    res.status(500).json({ error: "Erreur serveur lors de la suppression de la prestation", details: err });
+  }
+};

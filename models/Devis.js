@@ -4,7 +4,10 @@ const DevisSchema = new mongoose.Schema({
     idtypemoteur: { type: mongoose.Schema.Types.ObjectId, ref: 'typeMoteur', required: true },
     idmodele: { type: mongoose.Schema.Types.ObjectId, ref: 'Modele', required: true },
     idclient: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-    idprestations: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Prestation' }], // Tableau de références vers la collection Prestations
+    prestations: [{
+      idprestation: { type: mongoose.Schema.Types.ObjectId, ref: 'Prestation' },  // Référence à la prestation
+      avancement: { type: Number, default: 1 } // Avancement de la prestation, initialisé à 1
+    }],
     prixtotal: { type: Number, default: 0 },
     accepte: { type: Boolean, default: false },
   }, { timestamps: true });

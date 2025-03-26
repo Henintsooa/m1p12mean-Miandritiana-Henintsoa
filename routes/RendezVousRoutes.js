@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const RendezVousController = require('../controllers/rendezVousController');
 
+router.delete('/supprimerprestation', RendezVousController.supprimerPrestationRendezVous);
+router.post('/ajouterprestation', RendezVousController.ajouterPrestationRendezVous);
 router.get('/changeravancement', RendezVousController.changerAvancementRendezVous);
 router.get('/enattente', RendezVousController.getAllRendezVousEnAttenteByClient);
 router.get('/avalider', RendezVousController.getAllRendezVousEnAttente);

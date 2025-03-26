@@ -2,21 +2,55 @@ const Devis = require('../models/Devis');  // Assurez-vous d'importer le modèle
 const mongoose = require('mongoose');
 
 // Créer un devis
-exports.createDevis = (req, res) => {
-  const { immatriculation, idtypemoteur, idmodele, idclient, idprestations } = req.body;
+const Prestation = require("../models/Prestation"); // Assure-toi d'importer le modèle Prestation
 
-  const newDevis = new Devis({
-    immatriculation,
-    idtypemoteur,
-    idmodele,
-    idclient,
-    idprestations,
-  });
+exports.createDevis = async (req, res) => {
+  try {
+    const { immatriculation, idtypemoteur, idmodele, idclient, idprestations } = req.body;
 
-  newDevis.save()
-    .then(devis => res.status(201).json({ message: 'Devis créé avec succès', devis }))
-    .catch(err => res.status(500).json({ error: 'Erreur lors de la création du devis', err }));
+    // Vérifier si idprestations est un tableau et non vide
+    if (!Array.isArray(idprestations) || idprestations.length === 0) {
+      return res.status(400).json({ error: "Aucune prestation fournie" });
+    }
+
+    // Récupérer les prestations avec leurs prix
+    const prestationsData = await Prestation.find({ _id: { $in: idprestations } });
+
+    // Vérifier si des prestations existent
+    if (!prestationsData.length) {
+      return res.status(400).json({ error: "Aucune prestation trouvée" });
+    }
+
+    // Construire le tableau des prestations avec avancement par défaut
+    const prestations = prestationsData.map(prestation => ({
+      idprestation: prestation._id,
+      avancement: 1 // Valeur par défaut
+    }));
+
+    // Calculer le prix total
+    const prixtotal = prestationsData.reduce((total, prestation) => total + prestation.prixunitaire, 0);
+
+    // Créer le devis avec le prix total et les prestations correctement formatées
+    const newDevis = new Devis({
+      immatriculation,
+      idtypemoteur,
+      idmodele,
+      idclient,
+      prestations, // Utilisation du tableau formaté avec avancement
+      prixtotal
+    });
+
+    // Sauvegarde en base de données
+    const savedDevis = await newDevis.save();
+    
+    res.status(201).json({ message: "Devis créé avec succès", devis: savedDevis });
+
+  } catch (err) {
+    res.status(500).json({ error: "Erreur lors de la création du devis", details: err.message });
+  }
 };
+
+
 
 exports.acceptDevis = (req, res) => {
   const { iddevis } = req.params; // Récupérer l'ID du devis depuis l'URL
@@ -45,61 +79,54 @@ exports.acceptDevis = (req, res) => {
 };
 
 exports.getLastDevisByUser = (req, res) => {
-  const { idclient } = req.params; // Récupérer l'ID utilisateur depuis l'URL
+  const { idclient } = req.params;
 
-  // Vérifier si l'ID est valide
   if (!mongoose.Types.ObjectId.isValid(idclient)) {
-      return res.status(400).json({ error: 'ID utilisateur invalide' });
+    return res.status(400).json({ error: 'ID utilisateur invalide' });
   }
 
-  Devis.find({ idclient: new mongoose.Types.ObjectId(idclient) }) // Filtrer par idclient
-      .sort({ createdAt: -1 }) // Trier du plus récent au plus ancien
-      .populate({ path: 'idtypemoteur', model: 'typeMoteur' }) // Jointure TypeMoteur
-      .populate({ path: 'idmodele', model: 'Modele' }) // Jointure Modele
-      .populate({ 
-          path: 'idprestations', 
-          model: 'Prestation',
-          populate: { path: 'idcategorieprestation', model: 'CategoriePrestation' } // Jointure Catégorie
-      }) // Jointure Prestations avec catégorie
-      .then(devis => {
-          if (devis.length === 0) {
-              return res.status(404).json({ message: "Aucun devis trouvé pour cet utilisateur." });
-          }
+  Devis.find({ idclient: new mongoose.Types.ObjectId(idclient) })
+    .sort({ createdAt: -1 })
+    .populate({ path: 'idtypemoteur', model: 'typeMoteur' })
+    .populate({ path: 'idmodele', model: 'Modele' })
+    .populate({ 
+      path: 'prestations.idprestation',
+      model: 'Prestation',
+      populate: { path: 'idcategorieprestation', model: 'CategoriePrestation' }
+    })
+    .then(devis => {
+      if (devis.length === 0) {
+        return res.status(404).json({ message: "Aucun devis trouvé pour cet utilisateur." });
+      }
 
-          // Transformation du format pour le front-end Angular
-          const result = devis.map(devisItem => {
-              // Calcul du prix total en faisant la somme des prestations
-              const prixtotal = devisItem.idprestations.reduce((sum, prestation) => sum + prestation.prixunitaire, 0);
+      const result = devis.map(devisItem => {
+        const prixtotal = devisItem.prestations.reduce((sum, p) => sum + (p.idprestation ? p.idprestation.prixunitaire : 0), 0);
 
-              return {
-                  _id: devisItem._id,
-                  immatriculation: devisItem.immatriculation,
-                  typemoteur: devisItem.idtypemoteur.nom,  // Nom du type moteur
-                  modele: devisItem.idmodele.nom,  // Nom du modèle
-                  idclient: devisItem.idclient,
-                  prixtotal,
-                  accepte: devisItem.accepte,
-                  prestations: devisItem.idprestations.map(prestation => ({
-                      _id: prestation._id,
-                      nom: prestation.nom,
-                      typemoteur: prestation.idtypemoteur.nom,  // Nom du type moteur pour la prestation
-                      modele: prestation.idmodele.nom,  // Nom du modèle pour la prestation
-                      categorieprestation: prestation.idcategorieprestation.nom,  // Nom de la catégorie de prestation
-                      prixunitaire: prestation.prixunitaire
-                  })),
-                  createdAt: devisItem.createdAt
-              };
-          });
-
-          // Récupérer le dernier devis ajouté (le premier de la liste triée)
-          const dernierDevis = result[0];
-
-          res.status(200).json({ dernierDevis });
-      })
-      .catch(err => {
-          console.error('Erreur lors de la récupération des devis', err);
-          res.status(500).json({ error: 'Erreur lors de la récupération des devis', err });
+        return {
+          iddevis: devisItem._id,
+          immatriculation: devisItem.immatriculation,
+          typemoteur: devisItem.idtypemoteur.nom,
+          modele: devisItem.idmodele.nom,
+          idclient: devisItem.idclient,
+          prixtotal,
+          accepte: devisItem.accepte,
+          prestations: devisItem.prestations.map(p => ({
+            idprestation: p.idprestation._id,
+            nom: p.idprestation.nom,
+            categorieprestation: p.idprestation.idcategorieprestation.nom,
+            prixunitaire: p.idprestation.prixunitaire,
+            avancement: p.avancement
+          })),
+          createdAt: devisItem.createdAt
+        };
       });
+
+      res.status(200).json({ dernierDevis: result[0] });
+    })
+    .catch(err => {
+      console.error('Erreur lors de la récupération des devis', err);
+      res.status(500).json({ error: 'Erreur lors de la récupération des devis', err });
+    });
 };
 
 // Récupérer tous les devis avec prestations
@@ -112,56 +139,54 @@ exports.getAllDevis = (req, res) => {
 
 // Récupérer un devis par ID avec prestations
 exports.getAllAcceptedDevisByUser = (req, res) => {
-  const { idclient } = req.params; // Récupérer l'ID utilisateur depuis l'URL
-  console.log("client id", idclient);
-  // Vérifier si l'ID est valide
+  const { idclient } = req.params;
+
   if (!mongoose.Types.ObjectId.isValid(idclient)) {
-      return res.status(400).json({ error: 'ID utilisateur invalide' });
+    return res.status(400).json({ error: 'ID utilisateur invalide' });
   }
 
-  Devis.find({ idclient: new mongoose.Types.ObjectId(idclient), accepte: true  }) // Filtrer par idclient
-      .populate({ path: 'idtypemoteur', model: 'typeMoteur' }) // Jointure TypeMoteur
-      .populate({ path: 'idmodele', model: 'Modele' }) // Jointure Modele
-      .populate({ 
-          path: 'idprestations', 
-          model: 'Prestation',
-          populate: { path: 'idcategorieprestation', model: 'CategoriePrestation' } // Jointure Catégorie
-      }) // Jointure Prestations avec catégorie
-      .then(devis => {
-          if (devis.length === 0) {
-              return res.status(404).json({ message: "Aucun devis trouvé pour cet utilisateur." });
-          }
-           // Transformation du format pour le front-end Angular
-           const result = devis.map(devisItem => {
-            // Calcul du prix total en faisant la somme des prestations
-            const prixtotal = devisItem.idprestations.reduce((sum, prestation) => sum + prestation.prixunitaire, 0);
+  Devis.find({ idclient: new mongoose.Types.ObjectId(idclient), accepte: true })
+    .populate({ path: 'idtypemoteur', model: 'typeMoteur' })
+    .populate({ path: 'idmodele', model: 'Modele' })
+    .populate({ 
+      path: 'prestations.idprestation',
+      model: 'Prestation',
+      populate: { path: 'idcategorieprestation', model: 'CategoriePrestation' }
+    })
+    .then(devis => {
+      if (devis.length === 0) {
+        return res.status(404).json({ message: "Aucun devis accepté trouvé pour cet utilisateur." });
+      }
 
-            return {
-                _id: devisItem._id,
-                immatriculation: devisItem.immatriculation,
-                typemoteur: devisItem.idtypemoteur.nom,  // Nom du type moteur
-                modele: devisItem.idmodele.nom,  // Nom du modèle
-                idclient: devisItem.idclient,
-                prixtotal,
-                accepte: devisItem.accepte,
-                prestations: devisItem.idprestations.map(prestation => ({
-                    _id: prestation._id,
-                    nom: prestation.nom,
-                    typemoteur: prestation.idtypemoteur.nom,  // Nom du type moteur pour la prestation
-                    modele: prestation.idmodele.nom,  // Nom du modèle pour la prestation
-                    categorieprestation: prestation.idcategorieprestation.nom,  // Nom de la catégorie de prestation
-                    prixunitaire: prestation.prixunitaire
-                }))
-            };
-        });
+      const result = devis.map(devisItem => {
+        const prixtotal = devisItem.prestations.reduce((sum, p) => sum + (p.idprestation ? p.idprestation.prixunitaire : 0), 0);
 
-        res.status(200).json(result);
-      })
-      .catch(err => {
-          console.error('Erreur lors de la récupération des devis', err);
-          res.status(500).json({ error: 'Erreur lors de la récupération des devis', err });
+        return {
+          iddevis: devisItem._id,
+          immatriculation: devisItem.immatriculation,
+          typemoteur: devisItem.idtypemoteur.nom,
+          modele: devisItem.idmodele.nom,
+          idclient: devisItem.idclient,
+          prixtotal,
+          accepte: devisItem.accepte,
+          prestations: devisItem.prestations.map(p => ({
+            idprestation: p.idprestation._id,
+            nom: p.idprestation.nom,
+            categorieprestation: p.idprestation.idcategorieprestation.nom,
+            prixunitaire: p.idprestation.prixunitaire,
+            avancement: p.avancement
+          }))
+        };
       });
+
+      res.status(200).json(result);
+    })
+    .catch(err => {
+      console.error('Erreur lors de la récupération des devis', err);
+      res.status(500).json({ error: 'Erreur lors de la récupération des devis', err });
+    });
 };
+
 
 
 // Mettre à jour un devis
