@@ -572,7 +572,7 @@ exports.getAllRendezVousValides = async (req, res) => {
 exports.getAllRendezVousValidesByClient = async (req, res) => {
   try {
     console.log("Fetching all rendez-vous valides par idclient");
-    const { idclient } = req.body;
+    const { idclient } = req.params;
     console.log("ID Client reçu:", idclient);
 
     // 1. Trouver tous les devis associés à ce client
@@ -793,7 +793,7 @@ exports.getAllRendezVousEnAttente = async (req, res) => {
 exports.getAllRendezVousEnAttenteByClient = async (req, res) => {
   try {
     console.log("Fetching all rendez-vous en attente");
-    const { idclient } = req.body;
+    const { idclient } = req.params;
     console.log("ID Client reçu:", idclient);
 
     // 1. Trouver tous les devis associés à ce client
@@ -852,7 +852,7 @@ exports.getAllRendezVousEnAttenteByClient = async (req, res) => {
 exports.getDetailsDevisByRendezVous = async (req, res) => {
   try {
     console.log("Fetching details of the devis by idrendezvous");
-    const { idrendezvous } = req.body;
+    const { idrendezvous } = req.params;
     console.log("ID Rendez-vous reçu:", idrendezvous);
 
     // 1. Trouver le rendez-vous associé à l'ID donné
