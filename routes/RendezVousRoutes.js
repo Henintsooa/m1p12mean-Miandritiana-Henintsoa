@@ -10,7 +10,7 @@ router.get('/avalider', RendezVousController.getAllRendezVousEnAttente);
 router.post('/confirmation', RendezVousController.confirmerNouvelleDate);
 router.post('/proposer', RendezVousController.proposerNouvelleDate);
 router.post('/valider', RendezVousController.validerRendezVous);
-router.get('/mecaniciens', RendezVousController.getMecaniciensDisponibles);
+router.get('/mecaniciens/:date', RendezVousController.getMecaniciensDisponibles);
 router.post('/', RendezVousController.createRendezVous);
 router.get('/detailsdevis', RendezVousController.getDetailsDevisByRendezVous);
 router.get('/acceptes', RendezVousController.getAllRendezVousValidesByClient);

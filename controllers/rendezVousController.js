@@ -302,12 +302,23 @@ exports.validerRendezVous = async (req, res) => {
 
 exports.getMecaniciensDisponibles = async (req, res) => {
   try {
-    const { date } = req.body;
+    let { date } = req.params;
 
     if (!date || isNaN(Date.parse(date))) {
       return res.status(400).json({ error: "Date invalide fournie." });
     }
-
+     // Vérifier si la date est au format YYYY-MM-DDTHH:MM (sans secondes)
+     const regexSansSecondes = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
+    
+     if (regexSansSecondes.test(date)) {
+       date += ":00"; // Ajouter les secondes si absentes
+     }
+ 
+     // Ajouter le 'Z' à la fin si ce n'est pas un format UTC valide
+     if (!date.endsWith("Z") && !date.includes("+")) {
+       date += "Z"; // Convertir en UTC
+     }
+ 
     const dateObj = new Date(date);
     const heure = dateObj.getUTCHours();
 
@@ -317,7 +328,7 @@ exports.getMecaniciensDisponibles = async (req, res) => {
     }
 
     // Récupérer tous les mécaniciens
-    const mecaniciens = await User.find({ status: 2 });
+    const mecaniciens = await User.find({ status: 2 }).select('-mdp');
 
     // Définir la plage horaire du jour (8h-12h et 13h-17h)
     const dateDebutMatin = new Date(dateObj.setHours(8, 0, 0, 0)); // 08:00
