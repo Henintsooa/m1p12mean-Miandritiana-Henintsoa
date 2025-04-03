@@ -894,7 +894,9 @@ exports.getDetailsDevisByRendezVous = async (req, res) => {
     const result = {
       _id: devisItem._id,
       immatriculation: devisItem.immatriculation,
+      idtypemoteur: devisItem.idtypemoteur?._id,
       typemoteur: devisItem.idtypemoteur?.nom || 'N/A',
+      idmodele: devisItem.idmodele?._id,
       modele: devisItem.idmodele?.nom || 'N/A',
       clientnom: devisItem.idclient?.nom || 'N/A',
       clientprenom: devisItem.idclient?.prenom || 'N/A',
