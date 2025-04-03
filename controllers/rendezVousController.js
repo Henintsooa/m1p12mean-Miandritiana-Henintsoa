@@ -1015,14 +1015,25 @@ exports.changerAvancementRendezVous = async (req, res) => {
 
 exports.ajouterPrestationRendezVous = async (req, res) => {
   try {
-    const { idrendezvous, idprestation } = req.body; // Récupération des ID de rendez-vous et de prestation
+    const { idrendezvous, idprestation } = req.body;
     console.log("ID Rendez-vous reçu:", idrendezvous);
     console.log("ID Prestation reçu:", idprestation);
+
+    // Vérifier si les IDs sont valides
+    if (!mongoose.Types.ObjectId.isValid(idrendezvous) || !mongoose.Types.ObjectId.isValid(idprestation)) {
+      return res.status(400).json({ message: "ID de rendez-vous ou de prestation invalide." });
+    }
 
     // Trouver le rendez-vous par son ID
     const rendezVous = await RendezVous.findById(idrendezvous);
     if (!rendezVous) {
       return res.status(404).json({ message: "Rendez-vous non trouvé." });
+    }
+
+    // Trouver la prestation
+    const prestation = await Prestation.findById(idprestation);
+    if (!prestation) {
+      return res.status(404).json({ message: "Prestation non trouvée." });
     }
 
     // Trouver le devis associé au rendez-vous
@@ -1037,35 +1048,32 @@ exports.ajouterPrestationRendezVous = async (req, res) => {
       return res.status(400).json({ message: "Cette prestation est déjà ajoutée au devis." });
     }
 
-    // Ajouter la prestation au tableau des prestations du devis
-    devis.prestations.push({ idprestation: idprestation, avancement: 1 }); // Ajout avec avancement à 1 (attente)
+    // Ajouter la prestation avec un avancement à 1 (attente)
+    devis.prestations.push({ idprestation, avancement: 1 });
 
-    // Sauvegarder le devis avec la prestation ajoutée
+    // Sauvegarder le devis avec la nouvelle prestation
     await devis.save();
 
-    // Vérifier les avancements des prestations pour mettre à jour l'avancement du rendez-vous
+    // Mettre à jour l'avancement du rendez-vous
     const allPrestationsTerminees = devis.prestations.every(p => p.avancement === 3);
     const somePrestationsEnCours = devis.prestations.some(p => p.avancement === 2);
     const allPrestationsEnAttente = devis.prestations.every(p => p.avancement === 1);
 
-    // Mettre à jour l'avancement du rendez-vous en fonction des prestations du devis
     if (allPrestationsTerminees) {
-      rendezVous.avancement = 3; // Toutes les prestations terminées
+      rendezVous.avancement = 3;
     } else if (somePrestationsEnCours) {
-      rendezVous.avancement = 2; // Au moins une prestation en cours
+      rendezVous.avancement = 2;
     } else if (allPrestationsEnAttente) {
-      rendezVous.avancement = 1; // Toutes les prestations en attente
+      rendezVous.avancement = 1;
     } else {
-      // Si il y a un mix entre prestations en attente, en cours et terminées, on considère l'état comme "en cours"
       rendezVous.avancement = 2;
     }
 
-    // Sauvegarder le rendez-vous avec l'avancement mis à jour
+    // Sauvegarder le rendez-vous mis à jour
     await rendezVous.save();
 
-    // Retourner la réponse avec les prestations mises à jour
     res.status(200).json({
-      message: "Prestation ajoutée au devis et avancement du rendez-vous mis à jour.",
+      message: "Prestation ajoutée et avancement du rendez-vous mis à jour.",
       prestations: devis.prestations,
       avancementRendezVous: rendezVous.avancement
     });
