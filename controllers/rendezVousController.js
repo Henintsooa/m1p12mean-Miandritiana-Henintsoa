@@ -47,11 +47,6 @@ exports.confirmerNouvelleDate = async (req, res) => {
         if (!updatedRendezVous) {
           return res.status(404).json({ error: "Rendez-vous non trouvé." });
         }
-        // Formatage de la date
-        const formattedDateValide = updatedRendezVous.datevalide.toLocaleDateString('fr-FR'); // 'dd/MM/yyyy'
-
-        // Formatage de l'heure sans les secondes
-        const formattedTimeValide = updatedRendezVous.datevalide.toLocaleTimeString('fr-FR', { hour12: false, hour: '2-digit', minute: '2-digit' }); // 'HH:mm'
 
         // Création de la notification pour le manager
         const manager = await User.findOne({ status: 3 }); // Récupérer l'utilisateur avec le status 'manager'
@@ -59,7 +54,7 @@ exports.confirmerNouvelleDate = async (req, res) => {
           const notificationManager = new Notification({
             iduser: manager._id,
             type: "Rendez-vous confirmé",
-            message: `Le client ${clientExistant.nom} ${clientExistant.prenom} a confirmé la nouvelle date du ${formattedDateValide} à ${formattedTimeValide}.`,
+            message: `Le client ${clientExistant.nom} ${clientExistant.prenom} a confirmé la nouvelle date du ${updatedRendezVous.datevalide.toLocaleDateString()} à ${updatedRendezVous.datevalide.toLocaleTimeString()}.`,
             status: false,  // Notification non lue
             date_creation: new Date(),
           });
@@ -80,7 +75,7 @@ exports.confirmerNouvelleDate = async (req, res) => {
         const notificationClient = new Notification({
           iduser: idclient,
           type: "Date confirmée",
-          message: `Votre nouvelle date de rendez-vous a été confirmée : ${formattedDateValide} à ${formattedTimeValide}.`,
+          message: `Votre nouvelle date de rendez-vous a été confirmée : ${updatedRendezVous.datevalide.toLocaleDateString()} à ${updatedRendezVous.datevalide.toLocaleTimeString()}.`,
           status: false,  // Notification non lue
           date_creation: new Date(),
         });
@@ -91,7 +86,7 @@ exports.confirmerNouvelleDate = async (req, res) => {
         const notificationMecanicien = new Notification({
           iduser: updatedRendezVous.idmecanicien,
           type: "Rendez-vous confirmé",
-          message: `Votre rendez-vous avec le client ${clientExistant.nom} ${clientExistant.prenom} a été confirmé pour le ${formattedDateValide} à ${formattedTimeValide}.`,
+          message: `Votre rendez-vous avec le client ${clientExistant.nom} ${clientExistant.prenom} a été confirmé pour le ${updatedRendezVous.datevalide.toLocaleDateString()} à ${updatedRendezVous.datevalide.toLocaleTimeString()}.`,
           status: false,  // Notification non lue
           date_creation: new Date(),
         }); 
@@ -243,17 +238,12 @@ exports.proposerNouvelleDate = async (req, res) => {
     if (!updatedRendezVous) {
       return res.status(404).json({ error: "Rendez-vous non trouvé." });
     }
-    // Formatage de la date
-    const formattedDate = dateObj.toLocaleDateString('fr-FR'); // 'dd/MM/yyyy'
-
-    // Formatage de l'heure sans les secondes
-    const formattedTime = dateObj.toLocaleTimeString('fr-FR', { hour12: false, hour: '2-digit', minute: '2-digit' }); // 'HH:mm'
 
     // Création de la notification pour le client (en tenant compte du fuseau horaire local)
     const nouvelleNotification = new Notification({
       iduser: idclient,  // Utilisation de l'ID client passé en paramètre
       type: "Proposition de rendez-vous",
-      message: `Une nouvelle date a été proposée pour votre rendez-vous par cause d'indisponibilité, voici la nouvelle date : ${formattedDate} à ${formattedTime}. Veuillez confirmer ou refuser, si cela vous convient.`,
+      message: `Une nouvelle date a été proposée pour votre rendez-vous par cause d'indisponibilité, voici la nouvelle date : ${dateObj.toLocaleDateString()} à ${dateObj.toLocaleTimeString()}. Veuillez confirmer ou refuser, si cela vous convient.`,
       status: false, // Notification non lue
       date_creation: new Date(),
     });
@@ -333,17 +323,12 @@ exports.validerRendezVous = async (req, res) => {
     if (!updatedRendezVous) {
       return res.status(404).json({ error: "Rendez-vous non trouvé." });
     }
-     // Formatage de la date
-     const formattedDate = dateObj.toLocaleDateString('fr-FR'); // 'dd/MM/yyyy'
 
-     // Formatage de l'heure sans les secondes
-     const formattedTime = dateObj.toLocaleTimeString('fr-FR', { hour12: false, hour: '2-digit', minute: '2-digit' }); // 'HH:mm'
- 
     // Création de la notification pour le client (en tenant compte du fuseau horaire local)
     const nouvelleNotification = new Notification({
       iduser: idclient, // ID client
       type: "Rendez-vous validé",
-      message: `Votre rendez-vous du ${formattedDate} à ${formattedTime} a été validé.`,
+      message: `Votre rendez-vous du ${dateObj.toLocaleDateString()} à ${dateObj.toLocaleTimeString()} a été validé.`,
       status: false, // Notification non lue
       date_creation: new Date(),
     });
@@ -355,7 +340,7 @@ exports.validerRendezVous = async (req, res) => {
     const notificationMecanicien = new Notification({
       iduser: idmecanicien, // ID mécanicien
       type: "Rendez-vous validé",
-      message: `Votre rendez-vous avec le client ${clientExistant.nom} ${clientExistant.prenom} a été confirmé pour le ${updatedRendezVous.datevalide.toLocaleDateString('fr-FR')} à ${updatedRendezVous.datevalide.toLocaleTimeString('fr-FR', { hour12: false, hour: '2-digit', minute: '2-digit' })}.`,
+      message: `Votre rendez-vous avec le client ${clientExistant.nom} ${clientExistant.prenom} a été confirmé pour le ${updatedRendezVous.datevalide.toLocaleDateString()} à ${updatedRendezVous.datevalide.toLocaleTimeString()}.`,
       status: false, // Notification non lue
       date_creation: new Date(),
     });
@@ -854,7 +839,7 @@ exports.getAllRendezVousEnAttente = async (req, res) => {
         idclient: devis.idclient,
         client: `${client?.prenom || ''} ${client?.nom || ''}`,
         prestations: prestations.map(prestation => prestation.nom), // Récupération des noms des prestations
-        infosup: rdv.infosup || 'Aucun motif'
+        infosup: rdv.infosup || 'Aucune info'
       };
     }));
 
@@ -895,7 +880,7 @@ exports.getAllRendezVousEnAttenteByClient = async (req, res) => {
       idmecanicien: null,
       status: 2
     })
-    .select('createdAt infosup _id iddevis propositiondates');
+    .select('createdAt infosup _id iddevis');
 
     if (rendezVousList.length === 0) {
       return res.status(404).json({ message: "Aucun rendez-vous en attente trouvé pour ce client." });
@@ -918,8 +903,7 @@ exports.getAllRendezVousEnAttenteByClient = async (req, res) => {
         idrendezvous: rdv._id,
         iddevis: rdv.iddevis,
         createdAt: rdv.createdAt,
-        infosup: rdv.infosup || 'Aucun motif',
-        propositiondates: rdv.propositiondates,  // Dates proposées
+        infosup: rdv.infosup || 'Aucune info',
         prestations: prestationsAssociees, // Liste des noms de prestations
       };
     });
@@ -1190,11 +1174,6 @@ exports.supprimerPrestationRendezVous = async (req, res) => {
     const prestation = devis.prestations.find(p => p.idprestation.toString() === idprestation);
     if (!prestation) {
       return res.status(404).json({ message: "Prestation non trouvée." });
-    }
-
-    // Vérifier que le devis contient plus d'une prestation avant de supprimer
-    if (devis.prestations.length <= 1) {
-      return res.status(400).json({ message: "Un rendez-vous doit avoir au moins une prestation." });
     }
 
     // Vérifier que la prestation à supprimer a un avancement en attente ou en cours (1 ou 2)
