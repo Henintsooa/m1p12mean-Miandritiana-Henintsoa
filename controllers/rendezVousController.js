@@ -443,9 +443,9 @@ exports.createRendezVous = async (req, res) => {
       return res.status(400).json({ error: "Les dates proposées doivent être un tableau de dates valides." });
     }
 
-    // Vérification que propositiondates contient exactement 2 dates
-    if (propositiondates.length !== 2) {
-      return res.status(400).json({ error: "Il faut exactement 2 dates proposées." });
+    // Vérification que propositiondates contient entre 2 et 5 dates
+    if (propositiondates.length < 2 || propositiondates.length > 4) {
+      return res.status(400).json({ error: "Il faut proposer entre 2 et 4 dates." });
     }
 
     const currentDate = new Date();
@@ -1198,7 +1198,7 @@ exports.supprimerPrestationRendezVous = async (req, res) => {
       return res.status(404).json({ message: "Prestation non trouvée." });
     }
 
-    if(devis.prestations.length === 1) { 
+    if (devis.prestations.length <= 1) { 
       return res.status(400).json({ message: "Un rendez-vous doit avoir au moins une prestation." });
     }
     
