@@ -139,9 +139,28 @@ exports.confirmerNouvelleDate = async (req, res) => {
 
 exports.getRendezVousAConfirmer = async (req, res) => {
   try {
-    const rendezVousAConfirmer = await RendezVous.find({ status: 2,
-      idmecanicien: { $ne: null }
-      })
+    const { idclient } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(idclient)) {
+      return res.status(400).json({ error: "ID client invalide." });
+    }
+
+    // Trouver tous les devis associés à ce client
+    const devisList = await Devis.find({ idclient }).select('_id idclient');
+
+    if (devisList.length === 0) {
+      return res.status(404).json({ message: "Aucun devis trouvé pour ce client." });
+    }
+
+    // Extraire les IDs des devis
+    const devisIds = devisList.map(devis => devis._id);
+
+    // Trouver les rendez-vous à confirmer liés aux devis de ce client
+    const rendezVousAConfirmer = await RendezVous.find({
+      status: 2,
+      idmecanicien: { $ne: null },
+      iddevis: { $in: devisIds }
+    })
       .populate('idmecanicien', 'nom prenom')
       .sort({ createdAt: -1 });
 
@@ -163,6 +182,7 @@ exports.getRendezVousAConfirmer = async (req, res) => {
 
       resultats.push({
         idrendezvous: rdv._id,
+        idclient: devis.idclient, // Inclure l'idclient (iduser dans le devis associé)
         mecanicien: rdv.idmecanicien ? `${rdv.idmecanicien.nom} ${rdv.idmecanicien.prenom}` : null,
         propositiondate: rdv.propositiondates?.[0] ?? null,
         prestations: prestationsDetail,
