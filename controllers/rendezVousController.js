@@ -860,7 +860,7 @@ exports.getAllRendezVousEnAttente = async (req, res) => {
         idclient: devis.idclient,
         client: `${client?.prenom || ''} ${client?.nom || ''}`,
         prestations: prestations.map(prestation => prestation.nom), // Récupération des noms des prestations
-        infosup: rdv.infosup || 'Aucune info'
+        infosup: rdv.infosup || 'Aucun motif'
       };
     }));
 
@@ -901,7 +901,7 @@ exports.getAllRendezVousEnAttenteByClient = async (req, res) => {
       idmecanicien: null,
       status: 2
     })
-    .select('createdAt infosup _id iddevis');
+    .select('createdAt infosup _id iddevis propositiondates');
 
     if (rendezVousList.length === 0) {
       return res.status(404).json({ message: "Aucun rendez-vous en attente trouvé pour ce client." });
@@ -924,7 +924,8 @@ exports.getAllRendezVousEnAttenteByClient = async (req, res) => {
         idrendezvous: rdv._id,
         iddevis: rdv.iddevis,
         createdAt: rdv.createdAt,
-        infosup: rdv.infosup || 'Aucune info',
+        infosup: rdv.infosup || 'Aucun motif',
+        propositiondates: rdv.propositiondates,
         prestations: prestationsAssociees, // Liste des noms de prestations
       };
     });
