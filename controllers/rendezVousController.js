@@ -49,17 +49,19 @@ exports.confirmerNouvelleDate = async (req, res) => {
         }
 
         // Création de la notification pour le manager
-        const manager = await User.findOne({ status: 3 }); // Récupérer l'utilisateur avec le status 'manager'
-        if (manager) {
-          const notificationManager = new Notification({
-            iduser: manager._id,
-            type: "Rendez-vous confirmé",
-            message: `Le client ${clientExistant.nom} ${clientExistant.prenom} a confirmé la nouvelle date du ${updatedRendezVous.datevalide.toLocaleDateString()} à ${updatedRendezVous.datevalide.toLocaleTimeString()}.`,
-            status: false,  // Notification non lue
-            date_creation: new Date(),
-          });
-          // Sauvegarde de la notification pour le manager
-          await notificationManager.save();
+        const managers = await User.find({ status: 3 }); // Récupérer tous les utilisateurs avec le status 'manager'
+        if (managers && managers.length > 0) {
+          for (const manager of managers) {
+            const notificationManager = new Notification({
+              iduser: manager._id,
+              type: "Rendez-vous confirmé",
+              message: `Le client ${clientExistant.nom} ${clientExistant.prenom} a confirmé la nouvelle date du ${updatedRendezVous.datevalide.toLocaleDateString('fr-FR')} à ${updatedRendezVous.datevalide.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}.`,
+              status: false,  // Notification non lue
+              date_creation: new Date(),
+            });
+            // Sauvegarde de la notification pour chaque manager
+            await notificationManager.save();
+          }
         } else {
           console.log("Aucun manager trouvé.");
         }
@@ -75,7 +77,7 @@ exports.confirmerNouvelleDate = async (req, res) => {
         const notificationClient = new Notification({
           iduser: idclient,
           type: "Date confirmée",
-          message: `Votre nouvelle date de rendez-vous a été confirmée : ${updatedRendezVous.datevalide.toLocaleDateString()} à ${updatedRendezVous.datevalide.toLocaleTimeString()}.`,
+          message: `Votre nouvelle date de rendez-vous a été confirmée : ${updatedRendezVous.datevalide.toLocaleDateString('fr-FR')} à ${updatedRendezVous.datevalide.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}.`,
           status: false,  // Notification non lue
           date_creation: new Date(),
         });
@@ -86,7 +88,7 @@ exports.confirmerNouvelleDate = async (req, res) => {
         const notificationMecanicien = new Notification({
           iduser: updatedRendezVous.idmecanicien,
           type: "Rendez-vous confirmé",
-          message: `Votre rendez-vous avec le client ${clientExistant.nom} ${clientExistant.prenom} a été confirmé pour le ${updatedRendezVous.datevalide.toLocaleDateString()} à ${updatedRendezVous.datevalide.toLocaleTimeString()}.`,
+          message: `Votre rendez-vous avec le client ${clientExistant.nom} ${clientExistant.prenom} a été confirmé pour le ${updatedRendezVous.datevalide.toLocaleDateString('fr-FR')} à ${updatedRendezVous.datevalide.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}.`,
           status: false,  // Notification non lue
           date_creation: new Date(),
         }); 
@@ -107,19 +109,20 @@ exports.confirmerNouvelleDate = async (req, res) => {
         return res.status(404).json({ error: "Rendez-vous non trouvé." });
       }
 
-      // Notification au manager pour l'informer du rejet de la date
-      const manager = await User.findOne({ status: 3 }); // Récupérer l'utilisateur avec le status 'manager'
-      console.log("Manager trouvé :", manager);
-      if (manager) {
-        const notificationManager = new Notification({
-          iduser: manager._id,
-          type: "Proposition rejetée",
-          message: `Le client a rejeté la nouvelle date proposée : ${updatedRendezVous.dateproposee ? updatedRendezVous.dateproposee.toLocaleDateString() : "Aucune date"}.`,
-          status: false,
-          date_creation: new Date(),
-        });
-        // Sauvegarde de la notification pour le manager
-        await notificationManager.save();
+      // Notifications aux managers pour les informer du rejet de la date
+      const managers = await User.find({ status: 3 }); // Récupérer tous les utilisateurs avec le status 'manager'
+      if (managers && managers.length > 0) {
+        for (const manager of managers) {
+          const notificationManager = new Notification({
+        iduser: manager._id,
+        type: "Proposition rejetée",
+        message: `Le client a rejeté la nouvelle date proposée : ${updatedRendezVous.dateproposee ? updatedRendezVous.dateproposee.toLocaleDateString('fr-FR') : "Aucune date"}.`,
+        status: false,
+        date_creation: new Date(),
+          });
+          // Sauvegarde de la notification pour chaque manager
+          await notificationManager.save();
+        }
       } else {
         console.log("Aucun manager trouvé.");
       }
@@ -243,7 +246,7 @@ exports.proposerNouvelleDate = async (req, res) => {
     const nouvelleNotification = new Notification({
       iduser: idclient,  // Utilisation de l'ID client passé en paramètre
       type: "Proposition de rendez-vous",
-      message: `Une nouvelle date a été proposée pour votre rendez-vous par cause d'indisponibilité, voici la nouvelle date : ${dateObj.toLocaleDateString()} à ${dateObj.toLocaleTimeString()}. Veuillez confirmer ou refuser, si cela vous convient.`,
+      message: `Une nouvelle date a été proposée pour votre rendez-vous par cause d'indisponibilité, voici la nouvelle date : ${dateObj.toLocaleDateString('fr-FR')} à ${dateObj.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}. Veuillez confirmer ou refuser, si cela vous convient.`,
       status: false, // Notification non lue
       date_creation: new Date(),
     });
@@ -326,9 +329,9 @@ exports.validerRendezVous = async (req, res) => {
 
     // Création de la notification pour le client (en tenant compte du fuseau horaire local)
     const nouvelleNotification = new Notification({
-      iduser: idclient, // ID client
+      // ID client
       type: "Rendez-vous validé",
-      message: `Votre rendez-vous du ${dateObj.toLocaleDateString()} à ${dateObj.toLocaleTimeString()} a été validé.`,
+      message: `Votre rendez-vous du ${dateObj.toLocaleDateString('fr-FR')} à ${dateObj.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })} a été validé.`,
       status: false, // Notification non lue
       date_creation: new Date(),
     });
@@ -340,7 +343,7 @@ exports.validerRendezVous = async (req, res) => {
     const notificationMecanicien = new Notification({
       iduser: idmecanicien, // ID mécanicien
       type: "Rendez-vous validé",
-      message: `Votre rendez-vous avec le client ${clientExistant.nom} ${clientExistant.prenom} a été confirmé pour le ${updatedRendezVous.datevalide.toLocaleDateString()} à ${updatedRendezVous.datevalide.toLocaleTimeString()}.`,
+      message: `Votre rendez-vous avec le client ${clientExistant.nom} ${clientExistant.prenom} a été confirmé pour le ${updatedRendezVous.datevalide.toLocaleDateString('fr-FR')} à ${updatedRendezVous.datevalide.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}.`,
       status: false, // Notification non lue
       date_creation: new Date(),
     });
@@ -514,9 +517,10 @@ exports.createRendezVous = async (req, res) => {
     // Sauvegarde de la notification pour le client
     await notificationClient.save();
     
-    // Récupérer l'utilisateur avec le status 'manager' pour envoyer la notification
-    const manager = await User.findOne({ status: 3 }); // Récupérer l'utilisateur avec le status 'manager'
-    if (manager) {
+    // Récupérer tous les utilisateurs avec le status 'manager' pour envoyer les notifications
+    const managers = await User.find({ status: 3 }); // Récupérer tous les utilisateurs avec le status 'manager'
+    if (managers && managers.length > 0) {
+      for (const manager of managers) {
       const notificationManager = new Notification({
         iduser: manager._id,
         type: "Nouvelle demande de rendez-vous",
@@ -525,8 +529,9 @@ exports.createRendezVous = async (req, res) => {
         date_creation: new Date(),
       });
 
-      // Sauvegarde de la notification pour le manager
+      // Sauvegarde de la notification pour chaque manager
       await notificationManager.save();
+      }
     } else {
       console.log("Aucun manager trouvé.");
     }
@@ -574,10 +579,18 @@ exports.getAllRendezVousValides = async (req, res) => {
       console.log("Date recherchée:", searchDate);
 
       if (isNaN(searchDate)) {
-        return res.status(400).json({ message: "La date et l'heure spécifiées sont invalides." });
+      return res.status(400).json({ message: "La date et l'heure spécifiées sont invalides." });
       }
 
-      filters.datevalide = searchDate;
+      const searchDateWithoutSeconds = new Date(
+      searchDate.getFullYear(),
+      searchDate.getMonth(),
+      searchDate.getDate(),
+      searchDate.getHours(),
+      searchDate.getMinutes()
+      );
+
+      filters.datevalide = searchDateWithoutSeconds;
     }
 
     // 4. Appliquer le filtre sur l'avancement s'il est fourni et valide
@@ -740,10 +753,18 @@ exports.getAllRendezVousValidesByMecanicien = async (req, res) => {
       console.log("Date recherchée:", searchDate);
 
       if (isNaN(searchDate)) {
-        return res.status(400).json({ message: "La date et l'heure spécifiées sont invalides." });
+      return res.status(400).json({ message: "La date et l'heure spécifiées sont invalides." });
       }
 
-      filters.datevalide = searchDate;
+      const searchDateWithoutSeconds = new Date(
+      searchDate.getFullYear(),
+      searchDate.getMonth(),
+      searchDate.getDate(),
+      searchDate.getHours(),
+      searchDate.getMinutes()
+      );
+
+      filters.datevalide = searchDateWithoutSeconds;
     }
 
     // 5. Appliquer le filtre sur l'avancement s'il est fourni et valide
@@ -1176,6 +1197,10 @@ exports.supprimerPrestationRendezVous = async (req, res) => {
       return res.status(404).json({ message: "Prestation non trouvée." });
     }
 
+    if(devis.prestations.length === 1) { 
+      return res.status(400).json({ message: "Un rendez-vous doit avoir au moins une prestation." });
+    }
+    
     // Vérifier que la prestation à supprimer a un avancement en attente ou en cours (1 ou 2)
     if (![1, 2].includes(prestation.avancement)) {
       return res.status(400).json({ message: "La prestation ne peut être supprimée que si elle est en attente ou en cours." });
