@@ -134,6 +134,45 @@ exports.confirmerNouvelleDate = async (req, res) => {
   }
 };
 
+exports.getRendezVousAConfirmer = async (req, res) => {
+  try {
+    const rendezVousAConfirmer = await RendezVous.find({ status: 2,
+      idmecanicien: { $ne: null }
+      })
+      .populate('idmecanicien', 'nom prenom')
+      .sort({ createdAt: -1 });
+
+    const resultats = [];
+
+    for (const rdv of rendezVousAConfirmer) {
+      const devis = await Devis.findById(rdv.iddevis);
+
+      if (!devis) continue;
+
+      const prestationsDetail = [];
+
+      for (const p of devis.prestations) {
+        const prestation = await Prestation.findById(p.idprestation);
+        if (prestation) {
+          prestationsDetail.push(prestation.nom);
+        }
+      }
+
+      resultats.push({
+        idrendezvous: rdv._id,
+        mecanicien: rdv.idmecanicien ? `${rdv.idmecanicien.nom} ${rdv.idmecanicien.prenom}` : null,
+        propositiondate: rdv.propositiondates?.[0] ?? null,
+        prestations: prestationsDetail,
+      });
+    }
+
+    res.status(200).json(resultats);
+
+  } catch (error) {
+    console.error("Erreur lors de la récupération des rendez-vous à confirmer :", error);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+};
 
 exports.proposerNouvelleDate = async (req, res) => {
   try {
@@ -167,23 +206,25 @@ exports.proposerNouvelleDate = async (req, res) => {
     }
 
     const dateObj = new Date(nouvelleDate);
-    const heure = dateObj.getUTCHours();
 
+    // Récupère l'heure locale (au lieu d'UTC)
+    const heure = dateObj.getHours(); // getHours() retourne l'heure locale
 
-
-
-    // Vérification des horaires de travail (8h-12h et 13h-17h)
+    // Vérification des horaires de travail (8h-12h et 13h-17h) en fonction de l'heure locale
     if (!((heure >= 8 && heure < 12) || (heure >= 13 && heure < 17))) {
       return res.status(400).json({ error: "L'heure doit être entre 08h-12h ou 13h-17h." });
     }
 
-    // Vérifier si le mécanicien est disponible à cette date et heure
-    const rendezVousExistant = await RendezVous.findOne({ datevalide: dateObj, idmecanicien: idmecanicien });
+    // Vérifier si le mécanicien est disponible à cette date et heure (en local)
+    const rendezVousExistant = await RendezVous.findOne({
+      datevalide: dateObj, 
+      idmecanicien: idmecanicien
+    });
     if (rendezVousExistant) {
       return res.status(400).json({ error: "Le mécanicien n'est pas disponible à cette date et heure." });
     }
 
-    // Mettre à jour le rendez-vous avec la nouvelle date proposée
+    // Mettre à jour le rendez-vous avec la nouvelle date proposée (en local)
     const updatedRendezVous = await RendezVous.findByIdAndUpdate(
       idrendezvous,
       { 
@@ -193,12 +234,12 @@ exports.proposerNouvelleDate = async (req, res) => {
       },
       { new: true }
     );
-    
+
     if (!updatedRendezVous) {
       return res.status(404).json({ error: "Rendez-vous non trouvé." });
     }
 
-    // Création de la notification pour le client
+    // Création de la notification pour le client (en tenant compte du fuseau horaire local)
     const nouvelleNotification = new Notification({
       iduser: idclient,  // Utilisation de l'ID client passé en paramètre
       type: "Proposition de rendez-vous",
@@ -210,7 +251,9 @@ exports.proposerNouvelleDate = async (req, res) => {
     // Sauvegarde de la notification
     await nouvelleNotification.save();
 
+    // Réponse avec succès
     res.status(200).json({ message: "Proposition de nouvelle date envoyée avec succès", rendezVous: updatedRendezVous });
+
 
   } catch (error) {
     console.error("Erreur lors de la proposition de nouvelle date :", error);
@@ -247,15 +290,20 @@ exports.validerRendezVous = async (req, res) => {
     }
 
     const dateObj = new Date(datevalide);
-    const heure = dateObj.getUTCHours();
 
-    // Vérification des horaires de travail (8h-12h et 13h-17h)
+    // Récupère l'heure locale
+    const heure = dateObj.getHours();
+
+    // Vérification des horaires de travail (8h-12h et 13h-17h) en fonction de l'heure locale
     if (!((heure >= 8 && heure < 12) || (heure >= 13 && heure < 17))) {
       return res.status(400).json({ error: "L'heure doit être entre 08h-12h ou 13h-17h." });
     }
 
-    // Vérifier si le mécanicien est disponible à cette date et heure
-    const rendezVousExistant = await RendezVous.findOne({ datevalide: dateObj, idmecanicien: idmecanicien });
+    // Vérifier si le mécanicien est disponible à cette date et heure (en local)
+    const rendezVousExistant = await RendezVous.findOne({
+      datevalide: dateObj, 
+      idmecanicien: idmecanicien
+    });
     if (rendezVousExistant) {
       return res.status(400).json({ error: "Le mécanicien n'est pas disponible à cette date et heure." });
     }
@@ -263,7 +311,12 @@ exports.validerRendezVous = async (req, res) => {
     // Mettre à jour le rendez-vous avec la date validée et le mécanicien assigné
     const updatedRendezVous = await RendezVous.findByIdAndUpdate(
       idrendezvous,
-      { datevalide: dateObj, idmecanicien: idmecanicien, status: 1, avancement: 1 }, // Status de rendez-vous validé et avancement en attente chez le mécanicien
+      { 
+        datevalide: dateObj, 
+        idmecanicien: idmecanicien, 
+        status: 1, // Status de rendez-vous validé
+        avancement: 1 // Avancement en attente chez le mécanicien
+      },
       { new: true }
     );
 
@@ -271,29 +324,33 @@ exports.validerRendezVous = async (req, res) => {
       return res.status(404).json({ error: "Rendez-vous non trouvé." });
     }
 
-  // Création de la notification pour le client
-  const nouvelleNotification = new Notification({
-    iduser: idclient, // Utilisation de l'ID client passé en paramètre
-    type: "Rendez-vous validé",
-    message: `Votre rendez-vous du ${dateObj.toLocaleDateString()} à ${dateObj.toLocaleTimeString()} a été validé.`,
-    status: false, // Notification non lue
-    date_creation: new Date(),
-  });
+    // Création de la notification pour le client (en tenant compte du fuseau horaire local)
+    const nouvelleNotification = new Notification({
+      iduser: idclient, // ID client
+      type: "Rendez-vous validé",
+      message: `Votre rendez-vous du ${dateObj.toLocaleDateString()} à ${dateObj.toLocaleTimeString()} a été validé.`,
+      status: false, // Notification non lue
+      date_creation: new Date(),
+    });
 
-  // Sauvegarde de la notification
-  await nouvelleNotification.save();
+    // Sauvegarde de la notification pour le client
+    await nouvelleNotification.save();
 
-  // Sauvegarde de la notification pour le mecanicien
-  const notificationMecanicien = new Notification({
-    iduser: idmecanicien, // Utilisation de l'ID mecánicien pasa en paramètre
-    type: "Rendez-vous validé",
-    message: `Votre rendez-vous avec le client ${clientExistant.nom} ${clientExistant.prenom} a été confirmé pour le ${updatedRendezVous.datevalide.toLocaleDateString()} à ${updatedRendezVous.datevalide.toLocaleTimeString()}.`,
-    status: false, // Notification non lue
-    date_creation: new Date(),
-  });
-  await notificationMecanicien.save();
+    // Création de la notification pour le mécanicien
+    const notificationMecanicien = new Notification({
+      iduser: idmecanicien, // ID mécanicien
+      type: "Rendez-vous validé",
+      message: `Votre rendez-vous avec le client ${clientExistant.nom} ${clientExistant.prenom} a été confirmé pour le ${updatedRendezVous.datevalide.toLocaleDateString()} à ${updatedRendezVous.datevalide.toLocaleTimeString()}.`,
+      status: false, // Notification non lue
+      date_creation: new Date(),
+    });
 
-  res.status(200).json({ message: "Rendez-vous validé avec succès et notification envoyée", rendezVous: updatedRendezVous });
+    // Sauvegarde de la notification pour le mécanicien
+    await notificationMecanicien.save();
+
+    // Réponse avec succès
+    res.status(200).json({ message: "Rendez-vous validé avec succès et notification envoyée", rendezVous: updatedRendezVous });
+
   } catch (error) {
     console.error("Erreur lors de la validation du rendez-vous :", error);
     res.status(500).json({ error: "Erreur serveur" });
@@ -389,12 +446,14 @@ exports.createRendezVous = async (req, res) => {
     }
 
     const currentDate = new Date();
-    
+
     // Vérification que toutes les dates sont dans le futur et respectent les créneaux horaires
     const validTimes = propositiondates.map(dateStr => {
       const date = new Date(dateStr);
-      const hours = date.getUTCHours();
-      const minutes = date.getUTCMinutes();
+      
+      // Récupère l'heure locale
+      const hours = date.getHours(); 
+      const minutes = date.getMinutes();
 
       // Vérifie que l'heure est dans les plages 08:00-12:00 ou 13:00-17:00
       const isValidTime = 
@@ -412,9 +471,15 @@ exports.createRendezVous = async (req, res) => {
       return res.status(400).json({ error: "Les dates proposées doivent être dans le futur et entre 08h00-12h00 ou 13h00-17h00." });
     }
 
+    // Sauvegarde des dates locales en UTC avant de les stocker
     const newRendezVous = new RendezVous({
       iddevis,
-      propositiondates: validTimes.map(({ date }) => date), // Conversion en ISO
+      propositiondates: validTimes.map(({ date }) => {
+        // Conversion de la date locale en UTC avant de la sauvegarder en base
+        const localDate = new Date(date);
+        localDate.setMinutes(localDate.getMinutes() - localDate.getTimezoneOffset()); // Convertit en UTC
+        return localDate; // Sauvegarde la date en UTC
+      }),
       infosup: infosup || "", // Valeur par défaut si non fournie
       status: 2, // Status de proposition de date
       datevalide: null,
@@ -423,6 +488,7 @@ exports.createRendezVous = async (req, res) => {
 
     // Sauvegarde en base de données
     const savedRendezVous = await newRendezVous.save();
+
 
     // Récupération du devis pour obtenir l'ID du client
     const devis = await Devis.findById(iddevis); // Trouver le devis avec l'ID du devis
@@ -537,7 +603,7 @@ exports.getAllRendezVousValides = async (req, res) => {
         path: 'idmecanicien',
         select: 'nom prenom'
       })
-      .select('datevalide avancement');
+      .select('datevalide avancement').sort({ _id: -1 });;
 
     if (rendezVousList.length === 0) {
       return res.status(404).json({ message: "Aucun rendez-vous valide trouvé avec ces critères." });
@@ -608,7 +674,7 @@ exports.getAllRendezVousValidesByClient = async (req, res) => {
       path: 'idmecanicien', // Récupérer les informations sur le mécanicien
       select: 'nom prenom' // Sélectionner seulement le nom et prénom du mécanicien
     })
-    .select('datevalide avancement'); // Sélectionner les champs nécessaires
+    .select('datevalide avancement').sort({ _id: -1 }); // Sélectionner les champs nécessaires
 
     if (rendezVousList.length === 0) {
       return res.status(404).json({ message: "Aucun rendez-vous valide trouvé pour ce client." });
@@ -652,7 +718,7 @@ exports.getAllRendezVousValidesByMecanicien = async (req, res) => {
     }
 
     // 1. Trouver tous les devis associés
-    const devisList = await Devis.find().select('_id immatriculation idprestations');
+    const devisList = await Devis.find().select('_id immatriculation idprestations').sort({ _id: -1 });;
 
     if (devisList.length === 0) {
       return res.status(404).json({ message: "Aucun devis trouvé." });
@@ -703,7 +769,7 @@ exports.getAllRendezVousValidesByMecanicien = async (req, res) => {
         path: 'idmecanicien',
         select: 'nom prenom'
       })
-      .select('datevalide avancement');
+      .select('datevalide avancement').sort({ _id: -1 });
 
     if (rendezVousList.length === 0) {
       return res.status(404).json({ message: "Aucun rendez-vous valide trouvé avec ces critères." });
@@ -745,7 +811,7 @@ exports.getAllRendezVousEnAttente = async (req, res) => {
       idmecanicien: null,
       status: 2
     })
-    .select('createdAt infosup _id iddevis propositiondates');
+    .select('createdAt infosup _id iddevis propositiondates').sort({ createdAt: -1 });
 
     if (rendezVousList.length === 0) {
       return res.status(404).json({ message: "Aucun rendez-vous en attente trouvé." });
@@ -797,7 +863,7 @@ exports.getAllRendezVousEnAttenteByClient = async (req, res) => {
     console.log("ID Client reçu:", idclient);
 
     // 1. Trouver tous les devis associés à ce client
-    const devisList = await Devis.find({ idclient: idclient }).select('_id prestations');
+    const devisList = await Devis.find({ idclient: idclient }).select('_id prestations').sort({ _id: -1 });
 
     if (devisList.length === 0) {
       return res.status(404).json({ message: "Aucun devis trouvé pour ce client." });

@@ -8,6 +8,7 @@ router.post('/changeravancement', RendezVousController.changerAvancementRendezVo
 router.get('/enattente/:idclient', RendezVousController.getAllRendezVousEnAttenteByClient);
 router.get('/avalider', RendezVousController.getAllRendezVousEnAttente);
 router.post('/confirmation', RendezVousController.confirmerNouvelleDate);
+router.get('/proposition', RendezVousController.getRendezVousAConfirmer);
 router.post('/proposer', RendezVousController.proposerNouvelleDate);
 router.post('/valider', RendezVousController.validerRendezVous);
 router.get('/mecaniciens/:date', RendezVousController.getMecaniciensDisponibles);
